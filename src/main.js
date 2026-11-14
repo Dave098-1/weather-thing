@@ -1338,6 +1338,8 @@ setInterval(syncEdgeColor, 500);
 // (ios/App/Shared/SkyMoodShared.swift) so the island and the widgets always agree.
 
 const SkyNative = isNative ? registerPlugin('SkyMoodNative') : null;
+// In the iPhone app the button is always there; if something is wrong, tapping it says what.
+if (isNative) $('islandBtn').hidden = false;
 
 function nativePayload() {
   const c = state.data.current;
@@ -1369,7 +1371,7 @@ async function syncNative() {
   SkyNative.updateWidgets(payload).catch(() => {});
   try {
     const st = await SkyNative.islandStatus();
-    $('islandBtn').hidden = !st.supported;
+    if (st.supported === false) $('islandBtn').title = 'Needs iOS 16.2 or newer';
     let active = st.active;
     if (active) await SkyNative.updateIsland(payload);
     // iOS removes Live Activities after about 8 hours; bring it back if you had it on.
@@ -1381,9 +1383,28 @@ async function syncNative() {
 }
 
 $('islandBtn').addEventListener('click', async () => {
-  if (!SkyNative || !state.data) return;
+  if (!SkyNative) return;
+  if (!state.data) {
+    toast('Wait a moment for the weather to load, then try again.');
+    return;
+  }
+  let st;
   try {
-    const st = await SkyNative.islandStatus();
+    st = await SkyNative.islandStatus();
+  } catch (err) {
+    // Most likely the native part isn't in this build: rebuild with npm run ios
+    toast(`🏝️ The app’s native part didn’t answer: ${err?.message || err}`, 9000);
+    return;
+  }
+  if (!st.supported) {
+    toast('🏝️ The Dynamic Island needs iOS 16.2 or newer.', 6000);
+    return;
+  }
+  if (!st.enabled && !st.active) {
+    toast('🏝️ Live Activities are off for Sky Mood. Turn them on in Settings › Sky Mood › Live Activities.', 8000);
+    return;
+  }
+  try {
     if (st.active) {
       await SkyNative.hideIsland();
       store.set('island', false);
