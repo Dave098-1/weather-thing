@@ -43,6 +43,8 @@
       </array>
     </dict>
 	</dict>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Sky Mood uses your location to show the weather and sky where you are.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
