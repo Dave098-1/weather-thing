@@ -186,11 +186,13 @@
         </div>
         <input id="scrub" type="range" min="0" max="24" step="1" value="0" aria-label="Hours from now" />
         <div id="ticks" class="ticks"></div>
-        <table id="chartTable" class="sr-only">
+        <div class="sr-only">
+        <table id="chartTable">
           <caption>Next 24 hours</caption>
           <thead><tr><th scope="col">Time</th><th scope="col">Temperature</th><th scope="col">Chance of rain</th><th scope="col">Conditions</th></tr></thead>
           <tbody></tbody>
         </table>
+        </div>
       </section>
 
       <section class="days-wrap" aria-label="7 day forecast">

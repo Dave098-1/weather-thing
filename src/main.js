@@ -122,7 +122,19 @@ scene.onStrike = (closeness) => {
 };
 scene.start();
 
-$('sky').addEventListener('pointerdown', (e) => scene.burst(e.clientX, e.clientY));
+// Sparkles on a tap, not when a finger lands on the sky to scroll the page
+let skyPress = null;
+$('sky').addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') scene.burst(e.clientX, e.clientY);
+  else skyPress = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+$('sky').addEventListener('pointerup', (e) => {
+  if (!skyPress) return;
+  const tap = Math.hypot(e.clientX - skyPress.x, e.clientY - skyPress.y) < 10 && performance.now() - skyPress.t < 400;
+  skyPress = null;
+  if (tap) scene.burst(e.clientX, e.clientY);
+});
+$('sky').addEventListener('pointercancel', () => (skyPress = null));
 
 // ---------- formatting ----------
 
@@ -486,6 +498,11 @@ function hourAt(clientX) {
 
 $('chartArea').addEventListener('pointermove', (e) => chartPts.length && showTip(hourAt(e.clientX)));
 $('chartArea').addEventListener('pointerleave', hideTip);
+// On touch screens the tooltip only shows while your finger is on the chart
+for (const ev of ['pointerup', 'pointercancel']) {
+  $('chartArea').addEventListener(ev, (e) => e.pointerType !== 'mouse' && setTimeout(hideTip, 1200));
+}
+addEventListener('scroll', () => document.activeElement !== $('scrub') && hideTip(), { passive: true });
 $('chartArea').addEventListener('click', (e) => {
   if (!state.data) return;
   stopPlaying();

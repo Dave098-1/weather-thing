@@ -1515,11 +1515,21 @@ body.comparing .lab {
 
 .sr-only {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   overflow: hidden;
-  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
   white-space: nowrap;
+}
+
+.scrubber {
+  position: relative; /* keeps the hidden table inside the panel */
+}
+
+html {
+  overscroll-behavior-y: none; /* no rubber-band gap past the end of the page */
 }
 
 /* ---------- brand ---------- */
