@@ -1278,6 +1278,41 @@ if ('serviceWorker' in navigator && import.meta.env.PROD && !isNative) {
   addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
 
+// ---------- match the browser's edges to the sky ----------
+// Phones show the page background behind the status bar and toolbars, and iPhone Safari
+// tints its bars from it. Keep it the same colour as the top of the sky so there's no
+// dark strip at the top.
+
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+let lastEdge = '';
+function syncEdgeColor() {
+  // Average what is actually drawn along the top edge of the sky (clouds and all)
+  const canvas = $('sky');
+  let c = scene.skyTop;
+  try {
+    const row = canvas.getContext('2d').getImageData(0, 1, canvas.width, 1).data;
+    const sum = [0, 0, 0];
+    let n = 0;
+    for (let i = 0; i < row.length; i += 4 * 12) {
+      sum[0] += row[i];
+      sum[1] += row[i + 1];
+      sum[2] += row[i + 2];
+      n++;
+    }
+    if (n) c = sum.map((v) => v / n);
+  } catch {
+    /* fall back to the computed sky colour */
+  }
+  if (!c) return;
+  const hex = '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+  if (hex === lastEdge) return;
+  lastEdge = hex;
+  document.documentElement.style.backgroundColor = hex;
+  document.body.style.backgroundColor = hex;
+  themeMeta?.setAttribute('content', hex);
+}
+setInterval(syncEdgeColor, 500);
+
 // ---------- start ----------
 
 const saved = store.get('loc');
