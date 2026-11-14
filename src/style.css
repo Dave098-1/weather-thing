@@ -13,6 +13,9 @@
 
 * {
   box-sizing: border-box;
+  /* Phones: no double-tap-to-zoom (pinch-zoom still works), taps respond instantly.
+     Canvases that need raw touch (mist, game, globe, compare divider) override this. */
+  touch-action: manipulation;
 }
 
 [hidden] {
