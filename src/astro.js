@@ -83,3 +83,28 @@ export function moonIllumination(date) {
 }
 
 export const toDeg = (r) => r / rad;
+
+/** Everything the sky renderer needs to know about the sun and moon. */
+export function skyAt(date, lat, lon) {
+  const sun = sunPosition(date, lat, lon);
+  const moon = moonPosition(date, lat, lon);
+  return {
+    sunAlt: toDeg(sun.altitude),
+    sunAz: sun.azimuth,
+    moonAlt: toDeg(moon.altitude),
+    moonAz: moon.azimuth,
+    moonPhase: moonIllumination(date).phase,
+  };
+}
+
+/** Approximate point on Earth where the sun is directly overhead. */
+export function subsolarPoint(date = new Date()) {
+  const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+  const doy = (date - start) / dayMs;
+  const lat = -23.44 * Math.cos(((2 * PI) / 365) * (doy + 10));
+  const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60;
+  let lon = (12 - utcHours) * 15;
+  if (lon > 180) lon -= 360;
+  if (lon < -180) lon += 360;
+  return { lat, lon };
+}

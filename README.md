@@ -15,6 +15,14 @@ for your location, and rain, snow, storms, fog and wind are drawn live over it.
 - **Click the sky** for a burst that matches the weather (sparkles, ripples, snow puffs, shooting stars).
 - **Ambient sound** (off by default), generated in the browser with the Web Audio API: rain, wind,
   thunder and birdsong.
+- **Puff the weather buddy:** a little water-drop mascot who dresses for the weather (umbrella,
+  sunglasses, beanie and scarf, nightcap) and talks back when you tap it.
+- **"Feels like" thermometer** whose liquid sloshes into place (tap it to give it a shake).
+- **Heat shimmer** over the horizon on hot, sunny days.
+- **7-day flip cards:** tap a day to flip it over and see a tiny animated sky for that day.
+- **Compare cities (⚖️):** split-screen skies with a draggable divider, e.g. sunny Lisbon vs rainy London.
+- **3D globe (🌍):** spin the Earth (lit by the real sun, so you can see where it's night), tap a city
+  or anywhere, and jump to its weather.
 - **Effects lab:** press <kbd>D</kbd> (or 🎛️) to preview any weather and time of day.
 - °C/°F toggle, city search, and the browser's location lookup. Respects `prefers-reduced-motion`.
 
@@ -34,6 +42,8 @@ npm run preview  # serve the production build
   is shown in the page footer.
 - **City search:** Open-Meteo geocoding API (based on GeoNames).
 - **Sun and moon positions:** calculated in the browser (`src/astro.js`).
+- **Globe map:** coastlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain) via
+  the `world-atlas` package, drawn with [three.js](https://threejs.org/).
 - All visuals and sounds are generated in code; no third-party images or recordings.
 
 ## Code map
@@ -46,6 +56,11 @@ npm run preview  # serve the production build
 | `src/astro.js` | Sun/moon position and moon phase maths |
 | `src/audio.js` | Web Audio soundscape |
 | `src/mood.js` | Cheeky one-liners per condition |
+| `src/mascot.js` | Puff the mascot and its outfits |
+| `src/forecast.js` | 7-day flip cards with mini skies |
+| `src/compare.js` | Split-screen city comparison |
+| `src/globe.js` | 3D globe (loaded only when opened) |
+| `src/cities.js` | Well-known cities for the globe and quick picks |
 
 ## Hosting on GitHub Pages
 

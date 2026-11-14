@@ -32,6 +32,8 @@
           </div>
         </div>
         <div class="tools">
+          <button id="globeBtn" class="pill" title="Pick a place on the globe">🌍</button>
+          <button id="compareBtn" class="pill" title="Compare with another city">⚖️</button>
           <button id="unitBtn" class="pill" title="Switch units">°C</button>
           <button id="soundBtn" class="pill" title="Ambient sound" aria-pressed="false">🔇</button>
           <button id="labBtn" class="pill" title="Effects lab (press D)" aria-pressed="false">🎛️</button>
@@ -40,8 +42,32 @@
 
       <main class="hero">
         <div id="chip" class="chip" hidden></div>
-        <div class="temp-row">
-          <span id="temp" class="temp">--</span><span class="deg">°</span>
+        <div class="temp-stage">
+          <button id="mascot" class="mascot" title="Say hi to Puff"></button>
+          <div class="temp-row">
+            <span id="temp" class="temp">--</span><span class="deg">°</span>
+          </div>
+          <button id="thermo" class="thermo" title="Feels like">
+            <svg viewBox="0 0 44 150" aria-hidden="true">
+              <defs>
+                <clipPath id="tubeClip">
+                  <rect x="16" y="9" width="12" height="110" rx="6" />
+                  <circle cx="22" cy="127" r="12" />
+                </clipPath>
+              </defs>
+              <rect x="12" y="5" width="20" height="116" rx="10" class="th-glass" />
+              <circle cx="22" cy="127" r="17" class="th-glass" />
+              <g clip-path="url(#tubeClip)" id="thFill">
+                <rect id="thLiquid" x="10" y="80" width="24" height="70" fill="currentColor" />
+                <ellipse id="thMeniscus" cx="22" cy="80" rx="7" ry="2" fill="#fff" opacity="0.4" />
+              </g>
+              <g class="th-ticks">
+                <path d="M33 20h5M33 38h3M33 56h5M33 74h3M33 92h5M33 110h3" />
+              </g>
+              <rect x="18" y="13" width="2.5" height="100" rx="1.25" fill="#fff" opacity="0.45" />
+            </svg>
+            <span class="th-label">Feels<b id="thVal">--</b></span>
+          </button>
         </div>
         <div id="cond" class="cond">Loading the sky…</div>
         <div id="mood" class="mood"></div>
@@ -104,9 +130,17 @@
         <div id="ticks" class="ticks"></div>
       </section>
 
+      <section class="days-wrap" aria-label="7 day forecast">
+        <div class="days-head">
+          <span>Next 7 days</span>
+          <span class="sub">Tap a card to flip it</span>
+        </div>
+        <div id="days" class="days"></div>
+      </section>
+
       <footer class="foot">
         <a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>
-        (CC BY 4.0) · Click the sky · Press <kbd>D</kbd> for the effects lab
+        (CC BY 4.0) · Map data: Natural Earth · Click the sky · Press <kbd>D</kbd> for the effects lab
       </footer>
     </div>
 
@@ -120,6 +154,37 @@
       <div class="lab-label">Time of day</div>
       <div id="labTime" class="lab-btns"></div>
       <p class="lab-note">Preview only. The real forecast stays the same.</p>
+    </div>
+
+    <div id="compare" class="compare" hidden>
+      <canvas id="sky2" aria-hidden="true"></canvas>
+      <div id="cmpDivider" class="cmp-divider" role="slider" tabindex="0" aria-label="Drag to compare the two skies"
+           aria-valuemin="5" aria-valuemax="95" aria-valuenow="50"><span class="cmp-handle">⟷</span></div>
+      <div id="cmpLeft" class="cmp-card glass cmp-left"></div>
+      <div class="cmp-card glass cmp-right">
+        <div id="cmpInfo"></div>
+        <button id="cmpChange" class="ghost" hidden>Change city</button>
+        <div id="cmpSearch" class="cmp-search" hidden>
+          <div class="cmp-name">Compare with…</div>
+          <input id="cmpInput" type="search" placeholder="Search a city" autocomplete="off" aria-label="City to compare with" />
+          <ul id="cmpResults"></ul>
+          <div id="cmpPicks" class="cmp-picks"></div>
+        </div>
+      </div>
+      <button id="cmpClose" class="pill cmp-close">✕ Done</button>
+    </div>
+
+    <div id="globeView" class="globe-view" hidden>
+      <div id="globeMount" class="globe-mount"></div>
+      <div class="globe-top">
+        <span class="globe-title">Spin the globe, then tap a dot or anywhere</span>
+        <button id="globeClose" class="pill">✕ Close</button>
+      </div>
+      <div id="globeLoading" class="globe-loading">Loading the globe…</div>
+      <div id="globeLabel" class="globe-label glass" hidden>
+        <div id="globeName" class="globe-name"></div>
+        <button id="globeGo" class="pill">Show the weather here →</button>
+      </div>
     </div>
 
     <div id="toast" class="toast" role="status" hidden></div>

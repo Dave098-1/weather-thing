@@ -1,9 +1,12 @@
 import { Scene } from './scene.js';
-import { fetchForecast, searchCities, describe, weatherToScene } from './weather.js';
-import { sunPosition, moonPosition, moonIllumination, toDeg } from './astro.js';
+import { fetchForecast, searchCities, describe, weatherToScene, heatFor } from './weather.js';
+import { skyAt } from './astro.js';
 import { Soundscape } from './audio.js';
 import { moodFor } from './mood.js';
-import { clamp } from './util.js';
+import { Mascot } from './mascot.js';
+import { renderDays } from './forecast.js';
+import { Compare } from './compare.js';
+import { clamp, hexToRgb, mixRgb, rgba } from './util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -27,15 +30,17 @@ const store = {
 const LONDON = { name: 'London, United Kingdom', lat: 51.5085, lon: -0.1257 };
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+const CALM = { rain: 0, snow: 0, storm: 0, fog: 0, heat: 0 };
 const WEATHER_PRESETS = {
-  Clear: { rain: 0, snow: 0, storm: 0, fog: 0, cloud: 0.05, wind: 8 },
-  Clouds: { rain: 0, snow: 0, storm: 0, fog: 0, cloud: 0.85, wind: 15 },
-  Rain: { rain: 0.55, snow: 0, storm: 0, fog: 0, cloud: 0.9, wind: 15 },
-  Downpour: { rain: 1, snow: 0, storm: 0, fog: 0, cloud: 1, wind: 30 },
-  Snow: { rain: 0, snow: 0.8, storm: 0, fog: 0, cloud: 0.85, wind: 8 },
-  Storm: { rain: 0.9, snow: 0, storm: 1, fog: 0, cloud: 1, wind: 45 },
-  Fog: { rain: 0, snow: 0, storm: 0, fog: 0.9, cloud: 0.5, wind: 4 },
-  Windy: { rain: 0, snow: 0, storm: 0, fog: 0, cloud: 0.4, wind: 55, windDir: 270 },
+  Clear: { ...CALM, cloud: 0.05, wind: 8, temp: 20 },
+  Clouds: { ...CALM, cloud: 0.85, wind: 15, temp: 14 },
+  Rain: { ...CALM, rain: 0.55, cloud: 0.9, wind: 15, temp: 12 },
+  Downpour: { ...CALM, rain: 1, cloud: 1, wind: 30, temp: 12 },
+  Snow: { ...CALM, snow: 0.8, cloud: 0.85, wind: 8, temp: -2 },
+  Storm: { ...CALM, rain: 0.9, storm: 1, cloud: 1, wind: 45, temp: 18 },
+  Fog: { ...CALM, fog: 0.9, cloud: 0.5, wind: 4, temp: 8 },
+  Windy: { ...CALM, cloud: 0.4, wind: 55, windDir: 270, temp: 15 },
+  Heatwave: { ...CALM, heat: 1, cloud: 0.02, wind: 5, temp: 37 },
 };
 
 const TIME_PRESETS = {
@@ -58,6 +63,7 @@ const state = {
 
 const scene = new Scene($('sky'), { reducedMotion });
 const sound = new Soundscape();
+const mascot = new Mascot($('mascot'));
 
 scene.onStrike = (closeness) => {
   sound.thunder(closeness);
@@ -116,31 +122,21 @@ function dayFor(sec) {
 
 // ---------- scene targeting ----------
 
-function astroFor(date) {
-  const { lat, lon } = state.loc;
-  const sun = sunPosition(date, lat, lon);
-  const moon = moonPosition(date, lat, lon);
-  return {
-    sunAlt: toDeg(sun.altitude),
-    sunAz: sun.azimuth,
-    moonAlt: toDeg(moon.altitude),
-    moonAz: moon.azimuth,
-    moonPhase: moonIllumination(date).phase,
-  };
-}
-
 function updateScene() {
   if (!state.loc) return;
   let target;
   if (state.data) {
     const s = sliceAt(state.offset);
-    target = { ...weatherToScene(s), ...astroFor(new Date(s.time * 1000)), temp: s.temp };
+    const sc = weatherToScene(s);
+    const sky = skyAt(new Date(s.time * 1000), state.loc.lat, state.loc.lon);
+    target = { ...sc, ...sky, temp: s.temp, heat: heatFor(s.temp, sc, sky.sunAlt) };
   } else {
-    target = astroFor(new Date());
+    target = { ...scene.target, ...skyAt(new Date(), state.loc.lat, state.loc.lon) };
   }
   if (state.override.weather) Object.assign(target, WEATHER_PRESETS[state.override.weather]);
   if (state.override.time) Object.assign(target, TIME_PRESETS[state.override.time]);
   scene.setTarget(target);
+  mascot.update({ ...scene.target, ...target });
 }
 
 // ---------- UI ----------
@@ -186,6 +182,12 @@ function updateUI() {
     lastMood = mood;
   }
   $('hilo').textContent = `H ${fmtT(day.max)} · L ${fmtT(day.min)} · Feels like ${fmtT(s.feels)}`;
+
+  // Thermometer: -20 °C → empty, 40 °C → full
+  thermo.target = clamp((s.feels + 20) / 60, 0.04, 1);
+  $('thVal').textContent = fmtT(s.feels);
+  $('thermo').style.color = thermoColor(s.feels);
+  $('thermo').setAttribute('aria-label', `Feels like ${fmtT(s.feels)}`);
 
   // Stat cards
   $('windSpeed').textContent = fmtWind(s.wind);
@@ -299,6 +301,31 @@ function renderChart() {
   $('ticks').innerHTML = ticks;
 }
 
+// ---------- thermometer ----------
+
+const THERMO_STOPS = [
+  [-10, '#5aa9ff'],
+  [5, '#6fd3c1'],
+  [15, '#ffd36b'],
+  [25, '#ff9a4a'],
+  [35, '#ff4d4d'],
+].map(([t, c]) => [t, hexToRgb(c)]);
+
+function thermoColor(t) {
+  if (t <= THERMO_STOPS[0][0]) return rgba(THERMO_STOPS[0][1]);
+  for (let i = 1; i < THERMO_STOPS.length; i++) {
+    const [t1, c1] = THERMO_STOPS[i];
+    if (t <= t1) {
+      const [t0, c0] = THERMO_STOPS[i - 1];
+      return rgba(mixRgb(c0, c1, (t - t0) / (t1 - t0)));
+    }
+  }
+  return rgba(THERMO_STOPS[THERMO_STOPS.length - 1][1]);
+}
+
+const thermo = { level: 0, vel: 0, target: 0.4 };
+$('thermo').addEventListener('click', () => (thermo.vel += 2.2)); // give it a shake
+
 // ---------- weathervane spring + per-frame UI ----------
 
 const vane = { angle: 0, vel: 0, target: 0, wind: 0 };
@@ -314,6 +341,17 @@ function uiLoop(now) {
   vane.angle += vane.vel * dt;
   const jitter = reducedMotion ? 0 : Math.sin(now / 180) * Math.min(vane.wind, 60) * 0.06;
   $('vaneArrow').setAttribute('transform', `rotate(${(vane.angle + jitter).toFixed(2)} 32 32)`);
+
+  // Thermometer liquid: a springy fill that sloshes when it changes
+  thermo.vel += ((thermo.target - thermo.level) * 60 - thermo.vel * 7) * dt;
+  thermo.level += thermo.vel * dt;
+  if (Math.abs(thermo.vel) > 0.0005 || Math.abs(thermo.target - thermo.level) > 0.0005) {
+    const y = 116 - clamp(thermo.level, 0, 1.05) * 106;
+    $('thLiquid').setAttribute('y', y.toFixed(2));
+    $('thLiquid').setAttribute('height', (150 - y).toFixed(2));
+    $('thMeniscus').setAttribute('cy', y.toFixed(2));
+    $('thMeniscus').setAttribute('ry', (2 + Math.min(4, Math.abs(thermo.vel) * 12)).toFixed(2));
+  }
 
   const snowing = scene.p.snow > 0.25;
   snowCap = clamp(snowCap + (snowing ? dt * 2.5 * scene.p.snow : -dt * 4), 0, 14);
@@ -343,8 +381,10 @@ async function load() {
     state.data = data;
     state.offset = Math.min(state.offset, 24);
     renderChart();
+    renderForecastCards();
     updateUI();
     updateScene();
+    compare.refresh();
   } catch (err) {
     console.error(err);
     if (!state.data) $('cond').textContent = 'Couldn’t reach the weather service.';
@@ -463,7 +503,9 @@ $('unitBtn').addEventListener('click', () => {
   $('temp')._value = undefined;
   if (state.data) {
     renderChart();
+    renderForecastCards();
     updateUI();
+    compare.refresh();
   }
 });
 
@@ -574,11 +616,84 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') openSearch(false);
     return;
   }
-  if (e.key === 'd' || e.key === 'D') toggleLab();
   if (e.key === 'Escape') {
     toggleLab(false);
     openSearch(false);
+    if (compare.isOpen) compare.close();
+    if (!$('globeView').hidden) closeGlobe();
+    return;
   }
+  if (compare.isOpen || !$('globeView').hidden) return;
+  if (e.key === 'd' || e.key === 'D') toggleLab();
+});
+
+// ---------- 7-day cards ----------
+
+function renderForecastCards() {
+  renderDays($('days'), state.data, {
+    lat: state.loc.lat,
+    lon: state.loc.lon,
+    fmtT,
+    fmtTime,
+    fmtWind,
+    reducedMotion,
+  });
+}
+
+// ---------- compare cities ----------
+
+const compare = new Compare({
+  reducedMotion,
+  fmtT,
+  getMain: () => ({ loc: state.loc, data: state.data }),
+});
+
+$('compareBtn').addEventListener('click', () => {
+  toggleLab(false);
+  compare.open();
+});
+
+// ---------- globe ----------
+
+let globe = null;
+let globePick = null;
+
+async function openGlobe() {
+  const view = $('globeView');
+  view.hidden = false;
+  $('globeLabel').hidden = true;
+  toggleLab(false);
+  try {
+    if (!globe) {
+      const { Globe } = await import('./globe.js');
+      globe = new Globe($('globeMount'), {
+        reducedMotion,
+        onSelect: (place) => {
+          globePick = place;
+          $('globeName').textContent = `📍 ${place.name}`;
+          $('globeLabel').hidden = false;
+        },
+      });
+    }
+    $('globeLoading').hidden = true;
+    if (!view.hidden) globe.open(state.loc);
+  } catch (err) {
+    console.error(err);
+    $('globeLoading').textContent = 'The globe needs WebGL, which isn’t available here.';
+  }
+}
+
+function closeGlobe() {
+  $('globeView').hidden = true;
+  globe?.close();
+}
+
+$('globeBtn').addEventListener('click', openGlobe);
+$('globeClose').addEventListener('click', closeGlobe);
+$('globeGo').addEventListener('click', () => {
+  if (!globePick) return;
+  closeGlobe();
+  setLocation(globePick);
 });
 
 // ---------- start ----------
