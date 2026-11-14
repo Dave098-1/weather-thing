@@ -62,6 +62,29 @@ const SVG = `
     <rect x="35" y="72" width="50" height="9" rx="4.5" fill="#fff"/>
     <circle cx="100" cy="44" r="6" fill="#fff"/>
   </g>
+  <g class="m-hat m-hat-party">
+    <path d="M44 70 L60 24 L76 70 Z" fill="#ff6bb5"/>
+    <path d="M50 54 L70 54 M47 62 L73 62 M54 42 L66 42" stroke="#ffd36b" stroke-width="3"/>
+    <circle cx="60" cy="24" r="6" fill="#ffd36b"/>
+  </g>
+  <g class="m-hat m-hat-crown">
+    <path d="M38 74 L42 46 L51 60 L60 40 L69 60 L78 46 L82 74 Z" fill="#ffd36b" stroke="#e0a82e" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="60" cy="66" r="4" fill="#ff5d73"/>
+    <circle cx="48" cy="68" r="3" fill="#6bc6ff"/>
+    <circle cx="72" cy="68" r="3" fill="#6bffb8"/>
+  </g>
+  <g class="m-hat m-hat-flower">
+    <circle cx="40" cy="70" r="6.5" fill="#ff8fc0"/>
+    <circle cx="50" cy="64" r="6.5" fill="#ff8fc0"/>
+    <circle cx="48" cy="76" r="6.5" fill="#ff8fc0"/>
+    <circle cx="38" cy="60" r="6.5" fill="#ffb0d4"/>
+    <circle cx="44" cy="69" r="4.5" fill="#ffd36b"/>
+  </g>
+  <g class="m-hat m-hat-cap">
+    <path d="M37 76 Q60 40 83 76 Z" fill="#4a7cff"/>
+    <path d="M62 72 h32 q6 5 -2 9 h-30 z" fill="#2f5fd6"/>
+    <circle cx="60" cy="49" r="3.5" fill="#fff"/>
+  </g>
   <g class="m-zzz" fill="#fff" font-family="inherit" font-weight="600">
     <text x="92" y="70" font-size="12">z</text>
     <text x="100" y="56" font-size="15">z</text>
@@ -130,6 +153,21 @@ export class Mascot {
     this.el.setAttribute('aria-label', `Puff the weather buddy (${this.mood})`);
   }
 
+  /** Wardrobe: body colour and a fun hat. */
+  setStyle({ color = 'classic', hat = 'none' } = {}) {
+    for (const c of [...this.el.classList]) if (c.startsWith('c-') || c.startsWith('hat-')) this.el.classList.remove(c);
+    this.el.classList.add(`c-${color}`, `hat-${hat}`);
+    this.el.classList.toggle('has-fun-hat', hat !== 'none');
+  }
+
+  /** Show a speech bubble without the hop. */
+  say(text, ms = 4200) {
+    this.bubble.textContent = text;
+    this.bubble.hidden = false;
+    clearTimeout(this.bubbleTimer);
+    this.bubbleTimer = setTimeout(() => (this.bubble.hidden = true), ms);
+  }
+
   /** Puff's eyes follow the pointer. */
   look(x, y) {
     this.lookEl ??= this.el.querySelector('.m-look');
@@ -145,7 +183,7 @@ export class Mascot {
     this.el.classList.remove('hop');
     void this.el.offsetWidth;
     this.el.classList.add('hop');
-    const pool = [...LINES[this.mood], ...LINES.plain.slice(0, 2)];
+    const pool = [...LINES[this.mood], ...LINES.plain.slice(0, 2), ...(this.extraLines || [])];
     let line;
     do line = pool[(Math.random() * pool.length) | 0];
     while (pool.length > 1 && line === this.lastLine);

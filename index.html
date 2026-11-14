@@ -17,6 +17,7 @@
   </head>
   <body>
     <canvas id="sky" aria-hidden="true"></canvas>
+    <canvas id="mist" class="mist" aria-label="Misty window: draw on it"></canvas>
 
     <div id="splash" class="splash" aria-hidden="true">
       <img src="/icon.svg" alt="" class="splash-icon" />
@@ -36,6 +37,10 @@
             <input id="searchInput" type="search" placeholder="Search a city…" autocomplete="off" aria-label="Search a city" />
             <ul id="searchResults"></ul>
             <button id="geoBtn" class="ghost">📍 Use my location</button>
+            <div class="favs">
+              <button id="favToggle" class="ghost">☆ Save this place</button>
+              <div id="favList" class="fav-list"></div>
+            </div>
           </div>
         </div>
         <div class="tools">
@@ -48,6 +53,7 @@
       </header>
 
       <main class="hero">
+        <div id="favDots" class="fav-dots" hidden></div>
         <div id="chip" class="chip" hidden></div>
         <div class="temp-stage">
           <button id="mascot" class="mascot" title="Say hi to Puff"></button>
@@ -79,7 +85,19 @@
         <div id="cond" class="cond">Loading the sky…</div>
         <div id="mood" class="mood"></div>
         <div id="hilo" class="hilo"></div>
+        <div class="actions">
+          <button id="shareBtn" class="pill small">📸 Share my sky</button>
+          <button id="gameBtn" class="pill small">🎮 Catch the rain</button>
+          <button id="wardrobeBtn" class="pill small">👕 Wardrobe</button>
+          <button id="globeShakeBtn" class="pill small" hidden>🎄 Shake the snow globe</button>
+        </div>
       </main>
+
+      <section id="tipsBar" class="tips-bar glass" aria-label="What to wear" hidden>
+        <div class="tips-head">Today, bring…</div>
+        <div id="tips" class="tips"></div>
+        <div id="walk" class="walk"></div>
+      </section>
 
       <section class="stats">
         <div class="card glass">
@@ -117,6 +135,32 @@
             <circle id="sunDot" cx="10" cy="58" r="6" class="sun-dot" />
           </svg>
           <div id="sunTimes" class="sub"></div>
+        </div>
+        <div class="card glass">
+          <div class="card-label">Air quality <span id="aqScale" class="uv"></span></div>
+          <div class="aq">
+            <span id="aqIcon" class="aq-icon" aria-hidden="true">·</span>
+            <div>
+              <div id="aqVal" class="big">--</div>
+              <div id="aqLabel" class="sub">Loading…</div>
+            </div>
+          </div>
+          <div class="bar"><span id="aqBar"></span></div>
+          <div id="pollen" class="sub pollen"></div>
+        </div>
+        <div class="card glass">
+          <div class="card-label">Moon <span id="moonPct" class="uv"></span></div>
+          <div class="moon-row">
+            <svg id="moonSvg" viewBox="0 0 40 40" aria-hidden="true">
+              <circle cx="20" cy="20" r="16" class="moon-dark" />
+              <path id="moonLit" class="moon-lit" d="" />
+            </svg>
+            <div>
+              <div id="moonName" class="mid">--</div>
+              <div id="moonFull" class="sub"></div>
+            </div>
+          </div>
+          <div id="moonTimes" class="sub"></div>
         </div>
       </section>
 
@@ -173,6 +217,8 @@
       <div id="labWeather" class="lab-btns"></div>
       <div class="lab-label">Time of day</div>
       <div id="labTime" class="lab-btns"></div>
+      <div class="lab-label">Extras</div>
+      <div id="labExtra" class="lab-btns"></div>
       <p class="lab-note">Preview only. The real forecast stays the same.</p>
     </div>
 
@@ -204,6 +250,32 @@
       <div id="globeLabel" class="globe-label glass" hidden>
         <div id="globeName" class="globe-name"></div>
         <button id="globeGo" class="pill">Show the weather here →</button>
+      </div>
+    </div>
+
+    <div id="wardrobe" class="lab glass wardrobe" hidden>
+      <div class="lab-head">
+        <h2>Puff’s wardrobe</h2>
+        <button id="wardrobeClose" class="ghost" aria-label="Close wardrobe">✕</button>
+      </div>
+      <div class="lab-label">Colours</div>
+      <div id="wColors" class="w-items"></div>
+      <div class="lab-label">Hats</div>
+      <div id="wHats" class="w-items"></div>
+      <p class="lab-note">Unlock more by visiting in different weather and playing Catch the rain.</p>
+    </div>
+
+    <div id="game" class="game" hidden>
+      <canvas id="gameCanvas"></canvas>
+      <div class="game-hud">
+        <span class="hud-pill">⭐ <b class="g-score">0</b></span>
+        <span class="hud-pill">⏱️ <b class="g-time">30</b></span>
+        <button id="gameClose" class="pill small">✕ Close</button>
+      </div>
+      <div class="game-panel glass">
+        <h2></h2>
+        <p></p>
+        <button class="pill game-go">Start</button>
       </div>
     </div>
 

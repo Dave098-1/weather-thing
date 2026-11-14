@@ -57,7 +57,10 @@ export async function fetchForecast(lat, lon) {
   });
   const res = await fetch(`${FORECAST_URL}?${params}`);
   if (!res.ok) throw new Error(`The weather service answered with an error (${res.status}).`);
-  return normalize(await res.json());
+  const data = normalize(await res.json());
+  // served from the saved copy (see public/sw.js)
+  data.offline = res.headers.get('X-Sky-Offline') === '1' || navigator.onLine === false;
+  return data;
 }
 
 function normalize(raw) {

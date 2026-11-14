@@ -29,6 +29,20 @@ for your location, and rain, snow, storms, fog and wind are drawn live over it.
   cursor, and lightning that lights up the glass panels. All of it calms down with "reduce motion".
 - **24-hour chart:** temperature and chance of rain sit in separate strips (each with its own scale),
   with a hover tooltip, click-to-jump, and a hidden data table for screen readers.
+- **More sky magic:** rainbows when rain is ending and the sun is low, northern lights on dark nights
+  far from the equator, autumn leaves and spring blossom, New Year fireworks, a December snow globe
+  you can shake, and a smoggy haze when the air quality is poor.
+- **Misty window:** on rainy or foggy days the screen mists up and you can draw on it; it slowly mists
+  over again and your drawing drips.
+- **What to wear:** umbrella, coat, sunscreen and more from the next 12 hours, plus the best hour for a
+  walk (tap it to jump there). Puff mentions the top tip too.
+- **Air quality and pollen** card (EU or US index to match your units), and a **moon** card with the
+  phase, rise and set times and days until the full moon.
+- **Favourite places:** save them from the location menu, then swipe sideways (or press ← →) to switch.
+- **Share my sky:** makes a picture of your sky, the temperature and Puff to share or save.
+- **Catch the rain:** a 30-second mini-game; the falling things match the weather.
+- **Puff's wardrobe:** colours and hats unlocked by visiting in different weather and by game scores.
+- **Works offline:** after one visit the site opens without internet and shows the last saved forecast.
 - **App icon:** `public/icon.svg` plus PNG sizes and a web app manifest, so "Add to Home Screen" works.
 - °C/°F toggle, city search, and the browser's location lookup. Respects `prefers-reduced-motion`.
 
@@ -47,6 +61,7 @@ npm run preview  # serve the production build
   key needed, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The attribution
   is shown in the page footer.
 - **City search:** Open-Meteo geocoding API (based on GeoNames).
+- **Air quality and pollen:** Open-Meteo Air Quality API (CAMS data; pollen only covers Europe).
 - **Sun and moon positions:** calculated in the browser (`src/astro.js`).
 - **Globe map:** coastlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain) via
   the `world-atlas` package, drawn with [three.js](https://threejs.org/).
@@ -67,6 +82,13 @@ npm run preview  # serve the production build
 | `src/compare.js` | Split-screen city comparison |
 | `src/globe.js` | 3D globe (loaded only when opened) |
 | `src/cities.js` | Well-known cities for the globe and quick picks |
+| `src/mist.js` | Misty window you can draw on |
+| `src/tips.js` | What to wear and the best time for a walk |
+| `src/air.js` | Air quality and pollen |
+| `src/share.js` | Shareable picture of your sky |
+| `src/game.js` | "Catch the rain" mini-game |
+| `src/wardrobe.js` | Puff's unlockable colours and hats |
+| `public/sw.js` | Service worker for offline use |
 
 ## Hosting on GitHub Pages
 
