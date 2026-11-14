@@ -132,6 +132,45 @@ Developer Program ($99/year) removes that limit and lets you use TestFlight and 
 npm run ios:sync   # rebuild and copy into the iOS project, then press Run in Xcode
 ```
 
+### Widgets and the Dynamic Island
+
+The iOS app includes a **weather animal** that changes with the weather where you are:
+
+| Weather | Animal |
+| --- | --- |
+| Sunny | 🦎 Lizard, sunbathing on a rock |
+| Hot (28°C / 82°F+) | 🐪 Camel |
+| Partly cloudy | 🐝 Bee |
+| Cloudy | 🐑 Sheep |
+| Fog | 🦔 Hedgehog |
+| Drizzle / rain | 🦆 Duck |
+| Heavy rain | 🐸 Frog |
+| Snow | 🐧 Penguin |
+| Thunderstorm | 🐢 Turtle, hiding in its shell |
+| Windy (40 km/h+) | 🦅 Eagle |
+| Very cold (−5°C / 23°F or less) | 🐻‍❄️ Polar bear |
+| Clear night | 🦉 Owl |
+
+- **Widgets** (Home Screen: small and medium; Lock Screen: round, rectangular and inline). They fetch
+  the weather themselves for your current location, refresh about every hour, and line up the next
+  few hours so the animal changes on its own. Add one by long-pressing the Home Screen → **Edit** →
+  **Add Widget** → **Sky Mood**.
+- **Dynamic Island / Lock Screen** (Live Activity): tap **🏝️ Dynamic Island** in the app. It updates
+  whenever the app loads new weather. iOS removes Live Activities after about 8 hours; the app brings
+  it back the next time you open it. iPhones without a Dynamic Island show it on the Lock Screen.
+
+The native code is in `ios/App/SkyWidget/` (widget + Live Activity), `ios/App/Shared/SkyMoodShared.swift`
+(weather animal, used by both) and `ios/App/App/SkyMoodNativePlugin.swift` (lets the web code control
+the island). The app now needs **iOS 17** or newer.
+
+**First build after updating:** in Xcode, click the project, select the **SkyWidgetExtension** target,
+open **Signing & Capabilities** and choose your **Team** there too (same as for the App target). If you
+changed the app's bundle identifier, the widget's must start with it: e.g. `com.yourname.skymood.widget`.
+
+**Optional, paid Apple Developer account:** turn on the **App Groups** capability for *both* targets
+with the group `group.io.github.dave0981.skymood`. The widget then shows the place you picked in the
+app instead of your current location.
+
 ### Before publishing to the App Store
 
 - Apple may reject apps that are "just a website", so native extras (a home-screen widget, rain

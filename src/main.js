@@ -13,7 +13,7 @@ import { fetchAir, aqiLevel, pollenLevel, hazeFor } from './air.js';
 import { makeShareImage, shareOrDownload, mascotImage } from './share.js';
 import { CatchGame, themeFor } from './game.js';
 import { Wardrobe, ITEMS } from './wardrobe.js';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { StatusBar, Style } from '@capacitor/status-bar';
 
@@ -627,6 +627,8 @@ async function load() {
     updateScene();
     compare.refresh();
     hideSplash();
+    lastLoad = Date.now();
+    syncNative();
     if (data.offline) toast('📴 You’re offline, so this is the last saved forecast.', 6000);
   } catch (err) {
     console.error(err);
@@ -756,6 +758,7 @@ $('unitBtn').addEventListener('click', () => {
     renderAir();
     updateUI();
     compare.refresh();
+    syncNative();
   }
 });
 
@@ -1329,6 +1332,80 @@ function syncEdgeColor() {
   themeMeta?.setAttribute('content', hex);
 }
 setInterval(syncEdgeColor, 500);
+
+// ---------- iPhone app: Dynamic Island + widgets ----------
+// Native Swift code in ios/App/App/SkyMoodNativePlugin.swift. The animal is picked in Swift
+// (ios/App/Shared/SkyMoodShared.swift) so the island and the widgets always agree.
+
+const SkyNative = isNative ? registerPlugin('SkyMoodNative') : null;
+
+function nativePayload() {
+  const c = state.data.current;
+  const day = state.data.daily[0];
+  return {
+    place: state.loc.name.split(',')[0],
+    lat: state.loc.lat,
+    lon: state.loc.lon,
+    code: c.code,
+    tempC: c.temp,
+    isDay: c.isDay,
+    wind: c.wind,
+    highC: day.max,
+    lowC: day.min,
+    fahrenheit: state.unit === 'F',
+  };
+}
+
+function setIslandButton(active) {
+  const btn = $('islandBtn');
+  btn.setAttribute('aria-pressed', String(active));
+  btn.textContent = active ? '🏝️ Dynamic Island: on' : '🏝️ Dynamic Island';
+}
+
+/** After new weather loads: refresh the widgets, and the island if it's showing. */
+async function syncNative() {
+  if (!SkyNative || !state.data) return;
+  const payload = nativePayload();
+  SkyNative.updateWidgets(payload).catch(() => {});
+  try {
+    const st = await SkyNative.islandStatus();
+    $('islandBtn').hidden = !st.supported;
+    let active = st.active;
+    if (active) await SkyNative.updateIsland(payload);
+    // iOS removes Live Activities after about 8 hours; bring it back if you had it on.
+    else if (store.get('island') && st.enabled) active = (await SkyNative.showIsland(payload)).active;
+    setIslandButton(active);
+  } catch (err) {
+    console.warn(err);
+  }
+}
+
+$('islandBtn').addEventListener('click', async () => {
+  if (!SkyNative || !state.data) return;
+  try {
+    const st = await SkyNative.islandStatus();
+    if (st.active) {
+      await SkyNative.hideIsland();
+      store.set('island', false);
+      setIslandButton(false);
+      toast('Removed your weather animal from the Dynamic Island.');
+    } else {
+      const r = await SkyNative.showIsland(nativePayload());
+      store.set('island', true);
+      setIslandButton(true);
+      buzz('success');
+      toast(`${r.animal || '🐾'} Your weather animal is in the Dynamic Island (and on the Lock Screen).`, 6000);
+    }
+  } catch (err) {
+    toast(err?.message || 'Couldn’t show it in the Dynamic Island.', 6000);
+  }
+});
+
+// Coming back to the app after a while: fetch fresh weather (which also updates the island).
+let lastLoad = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - lastLoad > 10 * 60 * 1000) load();
+});
 
 // ---------- start ----------
 
