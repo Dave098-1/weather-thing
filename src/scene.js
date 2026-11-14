@@ -119,7 +119,7 @@ export class Scene {
   resize() {
     this.dpr = Math.min(devicePixelRatio || 1, 2);
     this.w = Math.max(1, this.sizeTo ? this.sizeTo.clientWidth : innerWidth);
-    this.h = Math.max(1, this.sizeTo ? this.sizeTo.clientHeight : innerHeight);
+    this.h = Math.max(1, this.sizeTo ? this.sizeTo.clientHeight : this.canvas.clientHeight || innerHeight);
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -619,6 +619,7 @@ export class Scene {
     mid = mixRgb(mid, mixRgb([22, 26, 34], [130, 140, 155], dayF), gloom);
     bot = mixRgb(bot, mixRgb([30, 34, 44], [165, 172, 182], dayF), gloom);
     this.skyBot = bot;
+    this.skyTop = top; // the page background follows this (see main.js)
     const horizon = h * 0.82;
     const g = ctx.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, rgba(top));

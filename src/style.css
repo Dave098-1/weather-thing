@@ -29,10 +29,17 @@ body {
 
 #sky {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100lvh; /* the largest viewport: still covers the screen when Safari's bars shrink */
   display: block;
+}
+
+html,
+body {
+  transition: background-color 1.2s ease;
 }
 
 #app {
@@ -2144,4 +2151,33 @@ body.gaming #mist {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* ---------- iPhone notch / home indicator (safe areas) ---------- */
+
+#app {
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+.game-hud,
+.globe-top {
+  top: max(16px, env(safe-area-inset-top));
+}
+
+.cmp-card {
+  top: max(16px, env(safe-area-inset-top));
+}
+
+.cmp-close,
+.lab {
+  bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+/* In the app there's no keyboard, so drop the "press D" hint */
+.native .foot kbd,
+.native .foot .kbd-hint {
+  display: none;
 }

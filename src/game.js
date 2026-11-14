@@ -4,7 +4,8 @@
 const ROUND = 30;
 
 export class CatchGame {
-  constructor({ el, canvas, getTheme, getPuffImage, onEnd, reducedMotion }) {
+  constructor({ el, canvas, getTheme, getPuffImage, onEnd, onCatch, reducedMotion }) {
+    this.onCatch = onCatch;
     this.el = el;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
@@ -127,6 +128,7 @@ export class CatchGame {
         it.done = true;
         const pts = it.kind === 'gold' ? 5 : it.kind === 'bad' ? -3 : 1;
         this.score = Math.max(0, this.score + pts);
+        this.onCatch?.(it.kind);
         this.pops.push({ x: it.x, y: catchY - 20, text: pts > 0 ? `+${pts}` : `${pts}`, life: 1, bad: pts < 0 });
         if (pts < 0) {
           this.flash = 1;
