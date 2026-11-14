@@ -30,7 +30,19 @@ const HOURLY_VARS = [
   'is_day',
 ];
 
-const DAILY_VARS = ['temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
+const DAILY_VARS = [
+  'weather_code',
+  'temperature_2m_max',
+  'temperature_2m_min',
+  'apparent_temperature_max',
+  'sunrise',
+  'sunset',
+  'precipitation_probability_max',
+  'precipitation_sum',
+  'wind_speed_10m_max',
+  'wind_direction_10m_dominant',
+  'uv_index_max',
+];
 
 export async function fetchForecast(lat, lon) {
   const params = new URLSearchParams({
@@ -41,7 +53,7 @@ export async function fetchForecast(lat, lon) {
     daily: DAILY_VARS.join(','),
     timezone: 'auto',
     timeformat: 'unixtime',
-    forecast_days: '3',
+    forecast_days: '7',
   });
   const res = await fetch(`${FORECAST_URL}?${params}`);
   if (!res.ok) throw new Error(`The weather service answered with an error (${res.status}).`);
@@ -86,6 +98,13 @@ function normalize(raw) {
       min: d.temperature_2m_min[i],
       sunrise: d.sunrise[i],
       sunset: d.sunset[i],
+      code: d.weather_code?.[i] ?? 3,
+      feelsMax: d.apparent_temperature_max?.[i] ?? d.temperature_2m_max[i],
+      pop: d.precipitation_probability_max?.[i] ?? 0,
+      precipSum: d.precipitation_sum?.[i] ?? 0,
+      windMax: d.wind_speed_10m_max?.[i] ?? 0,
+      windDir: d.wind_direction_10m_dominant?.[i] ?? 270,
+      uvMax: d.uv_index_max?.[i] ?? 0,
     })),
   };
 }
@@ -149,6 +168,12 @@ export function describe(code, isDay = true) {
   return { label, kind, emoji };
 }
 
+/** How strong the heat shimmer should be (0..1): hot, sunny and dry. */
+export function heatFor(tempC, scene, sunAlt) {
+  if (tempC < 26 || sunAlt < 5 || scene.rain > 0.05 || scene.snow > 0) return 0;
+  return Math.min(1, (tempC - 26) / 8) * (1 - scene.cloud * 0.8);
+}
+
 /** Turn a weather reading into the numbers the sky renderer understands. */
 export function weatherToScene(s) {
   const c = s.code;
@@ -177,7 +202,8 @@ export function weatherToScene(s) {
   // Let the measured precipitation push intensity up a bit.
   if (sc.rain > 0) sc.rain = Math.max(sc.rain, Math.min(1, (s.precip ?? 0) / 10));
   if (sc.rain || sc.snow || sc.storm) sc.cloud = Math.max(sc.cloud, 0.8);
-  if (c === 1) sc.cloud = Math.max(sc.cloud, 0.12);
+  if (c === 0) sc.cloud = Math.min(sc.cloud, 0.1);
+  if (c === 1) sc.cloud = Math.min(Math.max(sc.cloud, 0.12), 0.3);
   if (c === 2) sc.cloud = Math.max(sc.cloud, 0.45);
   if (c === 3) sc.cloud = Math.max(sc.cloud, 0.92);
   return sc;

@@ -40,15 +40,26 @@ export const DEFAULT_SCENE = {
   moonAz: -0.6,
   moonPhase: 0.4,
   temp: 15,
+  heat: 0,
 };
+
+let sharedCloudSprites = null;
 
 const LEAF_COLORS = ['#e07a2f', '#d4a017', '#b5482a', '#8fae3b', '#c9661e'];
 
 export class Scene {
-  constructor(canvas, { reducedMotion = false } = {}) {
+  /**
+   * @param canvas  the canvas to draw on
+   * @param options.sizeTo       element whose size the canvas follows (default: the window)
+   * @param options.interactive  react to the pointer (fog wiping, snow pushing, lens flare)
+   */
+  constructor(canvas, { reducedMotion = false, sizeTo = null, interactive = true } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.reduced = reducedMotion;
+    this.sizeTo = sizeTo;
+    this.interactive = interactive;
+    this.running = false;
     this.p = { ...DEFAULT_SCENE };
     this.target = { ...DEFAULT_SCENE };
     this.t = 0;
@@ -81,28 +92,33 @@ export class Scene {
       r: 0.25 + Math.random() * 0.3,
       sp: 0.004 + Math.random() * 0.012,
     }));
-    this.cloudSprites = makeCloudSprites(8);
+    sharedCloudSprites ??= makeCloudSprites(8);
+    this.cloudSprites = sharedCloudSprites;
     this.hills = [makeHill(11), makeHill(29)];
     this.fogCanvas = document.createElement('canvas');
     this.fogCtx = this.fogCanvas.getContext('2d');
 
     this.resize();
-    addEventListener('resize', () => this.resize());
-    addEventListener('pointermove', (e) => this.pointer(e.clientX, e.clientY));
-    addEventListener('pointerleave', () => (this.mouse.active = false));
-    document.addEventListener('pointerleave', () => (this.mouse.active = false));
+    if (sizeTo) new ResizeObserver(() => this.resize()).observe(sizeTo);
+    else addEventListener('resize', () => this.resize());
+    if (interactive) {
+      addEventListener('pointermove', (e) => this.pointer(e.clientX, e.clientY));
+      document.addEventListener('pointerleave', () => (this.mouse.active = false));
+    }
   }
 
   resize() {
     this.dpr = Math.min(devicePixelRatio || 1, 2);
-    this.w = innerWidth;
-    this.h = innerHeight;
+    this.w = Math.max(1, this.sizeTo ? this.sizeTo.clientWidth : innerWidth);
+    this.h = Math.max(1, this.sizeTo ? this.sizeTo.clientHeight : innerHeight);
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.fogCanvas.width = Math.ceil(this.w / 4);
     this.fogCanvas.height = Math.ceil(this.h / 4);
-    this.areaScale = clamp((this.w * this.h) / (1400 * 850), 0.35, 1.6) * (this.reduced ? 0.35 : 1);
+    this.areaScale = clamp((this.w * this.h) / (1400 * 850), 0.06, 1.6) * (this.reduced ? 0.35 : 1);
+    this.sizeScale = clamp(this.w / 1300, 0.25, 1.2);
+    this.vScale = clamp(this.h / 800, 0.3, 1.2);
   }
 
   pointer(x, y) {
@@ -122,9 +138,20 @@ export class Scene {
     Object.assign(this.target, t);
   }
 
+  /** Skip the smooth transition and show the target right away. */
+  jump() {
+    Object.assign(this.p, this.target);
+    this.cloudsReady = false;
+    this.clouds = [];
+    this.jumped = true; // fill the sky with rain/snow straight away
+  }
+
   start() {
+    if (this.running) return;
+    this.running = true;
     let last = performance.now();
     const loop = (now) => {
+      if (!this.running) return;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       this.update(dt);
@@ -132,6 +159,10 @@ export class Scene {
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
+  }
+
+  stop() {
+    this.running = false;
   }
 
   // ---------- helpers ----------
@@ -171,6 +202,7 @@ export class Scene {
 
   update(dt) {
     this.t += dt;
+    if (this.jumped && this.t > 0.5) this.jumped = false;
     const k = 1 - Math.exp(-dt * 1.8);
     for (const key in this.target) {
       const a = this.p[key];
@@ -219,7 +251,7 @@ export class Scene {
 
   spawnCloud(atEdge, dir) {
     const layer = Math.random();
-    const s = (0.45 + layer * 0.8) * clamp(this.w / 1300, 0.6, 1.2);
+    const s = (0.45 + layer * 0.8) * Math.max(this.sizeScale, 0.6 * Math.min(1, this.w / 700));
     const sprite = this.cloudSprites[(Math.random() * this.cloudSprites.length) | 0];
     const w = sprite.w * s;
     const x = atEdge ? (dir > 0 ? -w : this.w) : rand(-w * 0.5, this.w - w * 0.5);
@@ -242,7 +274,7 @@ export class Scene {
     const p = this.p;
     let dir = this.windX;
     if (Math.abs(dir) < 0.3) dir = dir < 0 ? -0.3 : 0.3;
-    const target = Math.round(p.cloud * 18 * clamp(this.w / 1300, 0.55, 1.5));
+    const target = Math.round(p.cloud * 18 * clamp(this.w / 1300, 0.3, 1.5));
     let alive = this.clouds.filter((c) => !c.dying).length;
     if (!this.cloudsReady) {
       while (alive < target) {
@@ -280,12 +312,13 @@ export class Scene {
   updateRain(dt) {
     const p = this.p;
     const target = Math.round(p.rain * 750 * this.areaScale);
-    while (this.drops.length < target) this.drops.push(this.newDrop(true));
+    const fresh = this.drops.length === 0 && this.jumped;
+    while (this.drops.length < target) this.drops.push(this.newDrop(!fresh));
     const windPx = this.windX * p.wind * 7;
     const speedMul = 0.8 + p.rain * 0.45;
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i];
-      d.y += (700 + d.z * 750) * speedMul * dt;
+      d.y += (700 + d.z * 750) * speedMul * this.vScale * dt;
       d.x += windPx * (0.5 + d.z * 0.5) * dt;
       if (d.y > this.groundY(d.x) + d.z * 40 - 20) {
         if (d.z > 0.7 && Math.random() < 0.5) this.splash(d.x, d.y);
@@ -312,10 +345,11 @@ export class Scene {
   updateSnow(dt) {
     const p = this.p;
     const target = Math.round(p.snow * 480 * this.areaScale);
+    const fresh = this.flakes.length === 0 && this.jumped;
     while (this.flakes.length < target) {
       this.flakes.push({
         x: rand(-50, this.w + 50),
-        y: rand(-this.h * 0.8, -10),
+        y: fresh ? rand(-10, this.h) : rand(-this.h * 0.8, -10),
         z: Math.random() ** 0.8,
         ph: Math.random() * 6.28,
       });
@@ -329,7 +363,7 @@ export class Scene {
     const m = this.mouse;
     for (let i = this.flakes.length - 1; i >= 0; i--) {
       const f = this.flakes[i];
-      f.y += (22 + f.z * 60) * (0.7 + p.snow * 0.5) * dt;
+      f.y += (22 + f.z * 60) * (0.7 + p.snow * 0.5) * Math.max(0.6, this.vScale) * dt;
       f.x += (windPx * f.z + Math.sin(this.t * 1.3 + f.ph) * 22 * f.z) * dt;
       if (m.active) {
         const dx = f.x - m.x;
@@ -526,6 +560,7 @@ export class Scene {
     const sun = this.drawSun();
     this.drawClouds(dayF);
     this.drawHills(dayF, gloom);
+    this.drawHeat();
     this.drawRain(dayF);
     this.drawSnow();
     this.drawLeaves();
@@ -579,7 +614,7 @@ export class Scene {
     const vis = (1 - p.cloud * 0.7) * (1 - p.fog * 0.8) * lerp(1, 0.35, dayF) * clamp((p.moonAlt + 4) / 6);
     if (vis < 0.02) return;
     const { x, y } = this.skyPos(p.moonAlt, p.moonAz);
-    const r = clamp(Math.min(this.w, this.h) * 0.045, 20, 46);
+    const r = clamp(Math.min(this.w, this.h) * 0.045, 9, 46);
 
     ctx.globalAlpha = vis;
     const glow = ctx.createRadialGradient(x, y, r * 0.8, x, y, r * 5);
@@ -625,7 +660,7 @@ export class Scene {
     const vis =
       clamp(1 - p.cloud * 0.75 - p.storm * 0.5 - p.fog * 0.6 - p.rain * 0.3) * clamp((p.sunAlt + 5) / 6);
     const { x, y } = this.skyPos(p.sunAlt, p.sunAz);
-    const R = clamp(Math.min(this.w, this.h) * 0.05, 24, 52);
+    const R = clamp(Math.min(this.w, this.h) * 0.05, 10, 52);
     const warm = clamp(p.sunAlt / 20);
     const core = mixRgb([255, 140, 70], [255, 248, 220], warm);
     const glowCol = mixRgb([255, 120, 60], [255, 230, 160], warm);
@@ -724,6 +759,30 @@ export class Scene {
     });
   }
 
+  /** Heat haze: wobble horizontal strips of the picture near the ground. */
+  drawHeat() {
+    const { ctx, w, h, p } = this;
+    if (p.heat < 0.02) return;
+    const top = h * 0.55;
+    const band = h - top;
+    // Warm haze over the horizon
+    const g = ctx.createLinearGradient(0, top, 0, h);
+    g.addColorStop(0, 'rgba(255,190,120,0)');
+    g.addColorStop(0.5, `rgba(255,190,120,${p.heat * 0.16})`);
+    g.addColorStop(1, `rgba(255,170,100,${p.heat * 0.1})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, top, w, band);
+    if (this.reduced) return;
+    const step = 3;
+    const dpr = this.dpr;
+    for (let y = top; y < h; y += step) {
+      const depth = (y - top) / band;
+      const off = Math.sin(y * 0.09 + this.t * 7) * Math.sin(y * 0.023 - this.t * 2.3) * p.heat * 4 * depth;
+      if (Math.abs(off) < 0.2) continue;
+      ctx.drawImage(this.canvas, 0, y * dpr, this.canvas.width, step * dpr, off, y, w, step);
+    }
+  }
+
   drawRain(dayF) {
     const { ctx, p } = this;
     if (!this.drops.length && !this.splashes.length) return;
@@ -743,9 +802,9 @@ export class Scene {
       ctx.beginPath();
       for (const d of this.drops) {
         if (d.z < lo || d.z >= hi) continue;
-        const vy = (700 + d.z * 750) * speedMul;
+        const vy = (700 + d.z * 750) * speedMul * this.vScale;
         const vx = windPx * (0.5 + d.z * 0.5);
-        const len = (10 + d.z * 22) * lenMul;
+        const len = (10 + d.z * 22) * lenMul * this.vScale;
         ctx.moveTo(d.x, d.y);
         ctx.lineTo(d.x - (vx / vy) * len, d.y - len);
       }
