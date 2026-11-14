@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sky Mood</title>
     <meta name="description" content="A weather website where the whole screen becomes the weather." />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛅</text></svg>"
-    />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#2f7fdc" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -16,6 +17,12 @@
   </head>
   <body>
     <canvas id="sky" aria-hidden="true"></canvas>
+
+    <div id="splash" class="splash" aria-hidden="true">
+      <img src="/icon.svg" alt="" class="splash-icon" />
+      <div class="splash-title">Sky Mood</div>
+      <div class="splash-sub">Painting your sky…</div>
+    </div>
 
     <div id="app">
       <header class="topbar">
@@ -121,13 +128,25 @@
             <button id="playBtn" class="pill small">▶ Play the day</button>
           </div>
         </div>
-        <div class="chart-wrap">
-          <svg id="chart" viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true"></svg>
-          <div id="chartOverlay" class="chart-overlay"></div>
-          <div id="marker" class="marker"><span id="markerDot"></span></div>
+        <div id="chartArea" class="chart-area">
+          <div class="chart-wrap">
+            <svg id="chart" viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <div id="chartOverlay" class="chart-overlay"></div>
+            <div id="marker" class="marker"><span id="markerDot"></span></div>
+          </div>
+          <div class="strip-label">💧 Chance of rain</div>
+          <div id="rainStrip" class="rain-strip" aria-hidden="true"></div>
+          <div id="hoverLine" class="hover-line" hidden>
+            <div id="tip" class="tip"></div>
+          </div>
         </div>
         <input id="scrub" type="range" min="0" max="24" step="1" value="0" aria-label="Hours from now" />
         <div id="ticks" class="ticks"></div>
+        <table id="chartTable" class="sr-only">
+          <caption>Next 24 hours</caption>
+          <thead><tr><th scope="col">Time</th><th scope="col">Temperature</th><th scope="col">Chance of rain</th><th scope="col">Conditions</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </section>
 
       <section class="days-wrap" aria-label="7 day forecast">
@@ -139,6 +158,7 @@
       </section>
 
       <footer class="foot">
+        <span class="brand"><img src="/icon.svg" alt="" class="foot-icon" />Sky Mood</span> ·
         <a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>
         (CC BY 4.0) · Map data: Natural Earth · Click the sky · Press <kbd>D</kbd> for the effects lab
       </footer>

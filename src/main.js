@@ -67,6 +67,12 @@ const mascot = new Mascot($('mascot'));
 
 scene.onStrike = (closeness) => {
   sound.thunder(closeness);
+  if (!reducedMotion) {
+    // The lightning lights up the glass cards too
+    document.body.classList.remove('flash');
+    void document.body.offsetWidth;
+    document.body.classList.add('flash');
+  }
   if (!reducedMotion && closeness > 0.55) {
     document.body.classList.remove('shake');
     void document.body.offsetWidth; // restart animation
@@ -143,22 +149,31 @@ function updateScene() {
 
 let lastMood = '';
 
-function tweenNumber(el, to) {
+/** Count a number up/down to its new value (e.g. 12 → 18), then give it a little bump. */
+function tweenValue(el, to, fmt = (v) => Math.round(v)) {
   const from = el._value ?? to;
   el._value = to;
+  cancelAnimationFrame(el._raf);
   if (reducedMotion || from === to) {
-    el.textContent = Math.round(to);
+    el.textContent = fmt(to);
     return;
   }
   const start = performance.now();
-  cancelAnimationFrame(el._raf);
   const step = (now) => {
     const t = Math.min(1, (now - start) / 700);
     const e = 1 - (1 - t) ** 3;
-    el.textContent = Math.round(from + (to - from) * e);
+    el.textContent = fmt(from + (to - from) * e);
     if (t < 1) el._raf = requestAnimationFrame(step);
   };
   el._raf = requestAnimationFrame(step);
+  if (Math.round(from) !== Math.round(to)) bump(el);
+}
+
+function bump(el, cls = 'bump') {
+  if (reducedMotion) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
 }
 
 function updateUI() {
@@ -168,8 +183,12 @@ function updateUI() {
   const info = describe(s.code, s.isDay);
   const day = dayFor(s.time);
 
-  tweenNumber($('temp'), toUnit(s.temp));
-  $('cond').textContent = `${info.emoji} ${info.label}`;
+  tweenValue($('temp'), toUnit(s.temp));
+  const condText = `${info.emoji} ${info.label}`;
+  if ($('cond').textContent !== condText) {
+    $('cond').textContent = condText;
+    bump($('cond'), 'swap');
+  }
 
   const seed = Math.floor(s.time / 3600) + (state.loc?.name.length || 0);
   const mood = moodFor({ kind: info.kind, temp: s.temp, night: !s.isDay, wind: s.wind, seed });
@@ -190,13 +209,13 @@ function updateUI() {
   $('thermo').setAttribute('aria-label', `Feels like ${fmtT(s.feels)}`);
 
   // Stat cards
-  $('windSpeed').textContent = fmtWind(s.wind);
+  tweenValue($('windSpeed'), s.wind, fmtWind);
   $('windDir').textContent = `from the ${compass(s.windDir)}`;
   vane.target = s.windDir + 180; // arrow points where the wind is going
   vane.wind = s.wind;
-  $('humidity').textContent = `${Math.round(s.humidity)}%`;
+  tweenValue($('humidity'), s.humidity, (v) => `${Math.round(v)}%`);
   $('humBar').style.width = `${clamp(s.humidity, 0, 100)}%`;
-  $('pop').textContent = `${Math.round(s.pop ?? 0)}%`;
+  tweenValue($('pop'), s.pop ?? 0, (v) => `${Math.round(v)}%`);
   $('precip').textContent = s.precip > 0 ? fmtPrecip(s.precip) : 'Dry right now';
   if (state.offset > 0) $('precip').textContent = s.precip > 0 ? fmtPrecip(s.precip) : 'Looks dry';
 
@@ -240,15 +259,19 @@ function updateChip() {
 }
 
 // ---------- 24h chart ----------
+// Temperature (line) and chance of rain (bars) use separate strips with their
+// own scales, so the chart never implies a link between the two that isn't there.
 
 let chartRange = { min: 0, max: 1 };
-const CHART_TOP = 44;
-const CHART_BOTTOM = 86;
+let chartPts = [];
+const CHART_TOP = 46;
+const CHART_BOTTOM = 90;
 const chartY = (t) =>
   CHART_BOTTOM - ((t - chartRange.min) / (chartRange.max - chartRange.min || 1)) * (CHART_BOTTOM - CHART_TOP);
 
 function renderChart() {
   const pts = Array.from({ length: 25 }, (_, k) => sliceAt(k));
+  chartPts = pts;
   const temps = pts.map((p) => p.temp);
   chartRange = { min: Math.min(...temps), max: Math.max(...temps) };
   const X = (k) => (k / 24) * 600;
@@ -265,12 +288,6 @@ function renderChart() {
     const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
     line += ` C${c1},${c2},${p2}`;
   }
-  const bars = pts
-    .map((p, k) => {
-      const h = ((p.pop ?? 0) / 100) * 34;
-      return h > 0.5 ? `<rect x="${X(k) - 6}" y="${100 - h}" width="12" height="${h}" rx="3" />` : '';
-    })
-    .join('');
 
   $('chart').innerHTML = `
     <defs>
@@ -279,19 +296,33 @@ function renderChart() {
         <stop offset="1" stop-color="#ffd36b" stop-opacity="0"/>
       </linearGradient>
     </defs>
-    <g fill="rgba(130,190,255,0.45)">${bars}</g>
-    <path d="${line} L600,100 L0,100 Z" fill="url(#area)" />
-    <path d="${line}" fill="none" stroke="#fff" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linecap="round" />`;
+    <line x1="0" y1="100" x2="600" y2="100" class="baseline" vector-effect="non-scaling-stroke" />
+    <path class="area" d="${line} L600,100 L0,100 Z" fill="url(#area)" />
+    <path class="line" d="${line}" fill="none" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" />`;
 
+  // Icons every 3 hours; direct temperature labels only where they matter: now, warmest, coldest.
+  const iMax = temps.indexOf(chartRange.max);
+  const iMin = temps.indexOf(chartRange.min);
+  const labelled = [...new Set([0, iMax, iMin])];
   let overlay = '';
   for (let k = 0; k <= 24; k += 3) {
-    const p = pts[k];
-    const left = (k / 24) * 100;
     const minor = k % 6 ? ' minor' : '';
-    overlay += `<span class="ico${minor}" style="left:${left}%">${describe(p.code, p.isDay).emoji}</span>`;
-    overlay += `<span class="t${minor}" style="left:${left}%;top:calc(${chartY(p.temp)}% - 22px)">${fmtT(p.temp)}</span>`;
+    overlay += `<span class="ico${minor}" style="left:${(k / 24) * 100}%;--i:${k / 3}">${describe(pts[k].code, pts[k].isDay).emoji}</span>`;
+  }
+  for (const k of labelled) {
+    overlay += `<span class="t" style="left:${clamp((k / 24) * 100, 3, 97)}%;top:calc(${chartY(pts[k].temp)}% - 21px)">${fmtT(pts[k].temp)}</span>`;
   }
   $('chartOverlay').innerHTML = overlay;
+
+  // Rain-chance strip: thin bars, rounded tops anchored to the baseline.
+  const pops = pts.map((p) => p.pop ?? 0);
+  const iWet = pops.indexOf(Math.max(...pops));
+  $('rainStrip').innerHTML = pops
+    .map((v, k) => {
+      const label = k === iWet && v >= 10 ? `<em>${Math.round(v)}%</em>` : '';
+      return `<i style="left:${(k / 24) * 100}%;height:${Math.max(v, 2)}%;--i:${k}" class="${v < 1 ? 'zero' : ''}">${label}</i>`;
+    })
+    .join('');
 
   let ticks = '';
   for (let k = 0; k <= 24; k += 6) {
@@ -299,7 +330,67 @@ function renderChart() {
     ticks += `<span style="left:${(k / 24) * 100}%">${label}</span>`;
   }
   $('ticks').innerHTML = ticks;
+
+  // Same numbers for screen readers
+  const tbody = $('chartTable').querySelector('tbody');
+  tbody.replaceChildren(
+    ...pts.map((p, k) => {
+      const tr = document.createElement('tr');
+      const cells = [
+        k === 0 ? 'Now' : fmtTime(p.time, { weekday: 'short', hour: 'numeric' }),
+        fmtT(p.temp),
+        `${Math.round(p.pop ?? 0)}%`,
+        describe(p.code, p.isDay).label,
+      ];
+      for (const c of cells) {
+        const td = document.createElement('td');
+        td.textContent = c;
+        tr.appendChild(td);
+      }
+      return tr;
+    })
+  );
+
+  bump($('chartArea'), 'drawn');
 }
+
+// Hover crosshair + tooltip (snaps to the nearest hour; click to jump there)
+function showTip(k) {
+  const p = chartPts[k];
+  if (!p) return;
+  const line = $('hoverLine');
+  line.hidden = false;
+  line.style.left = `calc(11px + (100% - 22px) * ${k / 24})`;
+  const tip = $('tip');
+  tip.replaceChildren();
+  const strong = document.createElement('strong');
+  strong.textContent = `${describe(p.code, p.isDay).emoji} ${fmtT(p.temp)}`;
+  const rain = document.createElement('span');
+  rain.textContent = `💧 ${Math.round(p.pop ?? 0)}% chance of rain`;
+  const time = document.createElement('small');
+  time.textContent = k === 0 ? 'Now' : fmtTime(p.time, { weekday: 'short', hour: 'numeric' });
+  tip.append(strong, rain, time);
+  tip.classList.toggle('flip', k > 14);
+}
+
+function hideTip() {
+  $('hoverLine').hidden = true;
+}
+
+function hourAt(clientX) {
+  const r = $('chartArea').getBoundingClientRect();
+  return Math.round(clamp((clientX - r.left - 11) / (r.width - 22), 0, 1) * 24);
+}
+
+$('chartArea').addEventListener('pointermove', (e) => chartPts.length && showTip(hourAt(e.clientX)));
+$('chartArea').addEventListener('pointerleave', hideTip);
+$('chartArea').addEventListener('click', (e) => {
+  if (!state.data) return;
+  stopPlaying();
+  setOffset(hourAt(e.clientX));
+});
+$('scrub').addEventListener('focus', () => chartPts.length && showTip(state.offset));
+$('scrub').addEventListener('blur', hideTip);
 
 // ---------- thermometer ----------
 
@@ -385,15 +476,18 @@ async function load() {
     updateUI();
     updateScene();
     compare.refresh();
+    hideSplash();
   } catch (err) {
     console.error(err);
     if (!state.data) $('cond').textContent = 'Couldn’t reach the weather service.';
     toast('Couldn’t load the weather. Check your connection and try again.');
     updateScene();
+    hideSplash();
   }
 }
 
 function setLocation(loc) {
+  if (state.loc && state.loc.name !== loc.name) bump(document.querySelector('.hero'), 'whoosh');
   state.loc = loc;
   store.set('loc', loc);
   $('locName').textContent = loc.name;
@@ -501,6 +595,7 @@ $('unitBtn').addEventListener('click', () => {
   store.set('unit', state.unit);
   setUnitLabel();
   $('temp')._value = undefined;
+  $('windSpeed')._value = undefined;
   if (state.data) {
     renderChart();
     renderForecastCards();
@@ -529,6 +624,7 @@ $('soundBtn').addEventListener('click', async () => {
 $('scrub').addEventListener('input', (e) => {
   stopPlaying();
   setOffset(Number(e.target.value));
+  if (document.activeElement === e.target) showTip(state.offset);
 });
 
 function setOffset(o) {
@@ -694,6 +790,49 @@ $('globeGo').addEventListener('click', () => {
   if (!globePick) return;
   closeGlobe();
   setLocation(globePick);
+});
+
+// ---------- splash, entrance & playful details ----------
+
+function hideSplash() {
+  const splash = $('splash');
+  if (!splash || splash.classList.contains('out')) return;
+  splash.classList.add('out');
+  document.body.classList.add('ready');
+  setTimeout(() => splash.remove(), 900);
+}
+setTimeout(hideSplash, 4000); // never keep people waiting on the splash
+
+// Stat cards tilt towards the pointer, with a soft shine
+if (!reducedMotion && matchMedia('(hover: hover)').matches) {
+  for (const card of document.querySelectorAll('.stats .card')) {
+    card.addEventListener('pointermove', (e) => {
+      const r = card.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width;
+      const y = (e.clientY - r.top) / r.height;
+      card.style.setProperty('--rx', `${(0.5 - y) * 8}deg`);
+      card.style.setProperty('--ry', `${(x - 0.5) * 10}deg`);
+      card.style.setProperty('--mx', `${x * 100}%`);
+      card.style.setProperty('--my', `${y * 100}%`);
+      card.classList.add('tilting');
+    });
+    card.addEventListener('pointerleave', () => {
+      card.classList.remove('tilting');
+      card.style.setProperty('--rx', '0deg');
+      card.style.setProperty('--ry', '0deg');
+    });
+  }
+}
+
+// Puff watches the pointer
+let lookQueued = false;
+addEventListener('pointermove', (e) => {
+  if (lookQueued || reducedMotion) return;
+  lookQueued = true;
+  requestAnimationFrame(() => {
+    lookQueued = false;
+    mascot.look(e.clientX, e.clientY);
+  });
 });
 
 // ---------- start ----------

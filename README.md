@@ -24,6 +24,12 @@ for your location, and rain, snow, storms, fog and wind are drawn live over it.
 - **3D globe (🌍):** spin the Earth (lit by the real sun, so you can see where it's night), tap a city
   or anywhere, and jump to its weather.
 - **Effects lab:** press <kbd>D</kbd> (or 🎛️) to preview any weather and time of day.
+- **Lively UI:** an animated splash screen, cards that rise in one after another, numbers that count
+  up, cards that tilt towards your pointer, a chart that draws itself in, Puff's eyes following your
+  cursor, and lightning that lights up the glass panels. All of it calms down with "reduce motion".
+- **24-hour chart:** temperature and chance of rain sit in separate strips (each with its own scale),
+  with a hover tooltip, click-to-jump, and a hidden data table for screen readers.
+- **App icon:** `public/icon.svg` plus PNG sizes and a web app manifest, so "Add to Home Screen" works.
 - °C/°F toggle, city search, and the browser's location lookup. Respects `prefers-reduced-motion`.
 
 ## Running it

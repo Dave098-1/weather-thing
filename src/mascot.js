@@ -24,12 +24,12 @@ const SVG = `
     <ellipse cx="44" cy="84" rx="6" ry="9" fill="#fff" opacity="0.55" transform="rotate(25 44 84)"/>
     <ellipse cx="40" cy="115" rx="6" ry="3.5" fill="#ff8fa3" opacity="0.55"/>
     <ellipse cx="80" cy="115" rx="6" ry="3.5" fill="#ff8fa3" opacity="0.55"/>
-    <g class="m-eyes">
+    <g class="m-eyes"><g class="m-look">
       <circle cx="48" cy="104" r="4.8" fill="#1d2540"/>
       <circle cx="72" cy="104" r="4.8" fill="#1d2540"/>
       <circle cx="49.6" cy="102.4" r="1.6" fill="#fff"/>
       <circle cx="73.6" cy="102.4" r="1.6" fill="#fff"/>
-    </g>
+    </g></g>
     <g class="m-sleepy" fill="none" stroke="#1d2540" stroke-width="2.4" stroke-linecap="round">
       <path d="M43 104 q5 4 10 0"/>
       <path d="M67 104 q5 4 10 0"/>
@@ -128,6 +128,17 @@ export class Mascot {
                   ? 'sunny'
                   : 'plain';
     this.el.setAttribute('aria-label', `Puff the weather buddy (${this.mood})`);
+  }
+
+  /** Puff's eyes follow the pointer. */
+  look(x, y) {
+    this.lookEl ??= this.el.querySelector('.m-look');
+    const r = this.el.getBoundingClientRect();
+    const dx = x - (r.left + r.width / 2);
+    const dy = y - (r.top + r.height * 0.7);
+    const d = Math.hypot(dx, dy) || 1;
+    const m = Math.min(2.6, d / 60);
+    this.lookEl.setAttribute('transform', `translate(${((dx / d) * m).toFixed(2)} ${((dy / d) * m).toFixed(2)})`);
   }
 
   poke() {
