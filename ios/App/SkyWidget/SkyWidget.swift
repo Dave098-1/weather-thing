@@ -1,4 +1,4 @@
-// Home Screen and Lock Screen widgets: today's weather animal and temperature.
+// Home Screen and Lock Screen widgets: Puff dressed for the weather, the temperature and a message.
 // The widget fetches the weather itself from Open-Meteo (free, no key) so it
 // stays fresh even when the app isn't open.
 
@@ -20,7 +20,7 @@ struct SkyEntry: TimelineEntry {
     var failed = false
 
     var kind: SkyKind { SkyKind(code: code) }
-    var animal: SkyAnimal { SkyAnimal.forWeather(code: code, tempC: tempC, windKmh: windKmh, isDay: isDay) }
+    var puff: SkyPuff { SkyPuff.forWeather(code: code, tempC: tempC, windKmh: windKmh, isDay: isDay, date: date) }
     var fahrenheit: Bool { SkyText.prefersFahrenheit }
     var temp: String { SkyText.temp(tempC, fahrenheit: fahrenheit) }
     var condition: String { SkyText.label(code: code) }
@@ -110,7 +110,7 @@ private final class PlaceFinder: NSObject, CLLocationManagerDelegate {
 }
 
 enum SkyFetcher {
-    /// The current weather plus the next few hours, so the animal can change on its own.
+    /// The current weather plus the next few hours, so Puff can change outfits on its own.
     static func entries() async -> [SkyEntry] {
         let place = await PlaceFinder().find()
         var comps = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
@@ -208,31 +208,26 @@ struct SkyWidgetView: View {
             ZStack {
                 AccessoryWidgetBackground()
                 VStack(spacing: 0) {
-                    Text(entry.animal.emoji).font(.system(size: 20))
+                    Image(entry.puff.image).resizable().scaledToFit().frame(height: 26)
                     Text(entry.temp).font(.system(.headline, design: .rounded))
                         .contentTransition(.numericText())
                 }
             }
         case .accessoryRectangular:
             HStack(spacing: 8) {
-                Text(entry.animal.emoji).font(.system(size: 30))
+                Image(entry.puff.image).resizable().scaledToFit().frame(height: 46)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("\(entry.temp) \(entry.condition)").font(.headline).lineLimit(1)
-                    Text(entry.animal.line).font(.caption).lineLimit(1)
-                    Text(entry.place).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    Text("\(entry.temp) \(entry.condition)").font(.headline).lineLimit(1).minimumScaleFactor(0.8)
+                    Text(entry.puff.line).font(.caption).lineLimit(2).minimumScaleFactor(0.85)
                 }
             }
         case .accessoryInline:
-            Text("\(entry.animal.emoji) \(entry.temp) · \(entry.condition)")
+            Text("💧 \(entry.temp) · \(entry.condition)")
         case .systemMedium:
-            HStack(spacing: 14) {
-                VStack(spacing: 4) {
-                    animalView(size: 64)
-                    Text(entry.animal.line)
-                        .font(.system(.caption, design: .rounded).weight(.medium))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.8)
+            HStack(spacing: 12) {
+                VStack(spacing: 6) {
+                    puffView(height: 82)
+                    speechBubble(entry.puff.line, font: .system(.caption, design: .rounded).weight(.medium))
                 }
                 .frame(maxWidth: .infinity)
                 VStack(alignment: .leading, spacing: 2) {
@@ -241,7 +236,7 @@ struct SkyWidgetView: View {
                         .font(.system(size: 46, weight: .semibold, design: .rounded))
                         .contentTransition(.numericText())
                     Text("\(SkyText.emoji(code: entry.code, isDay: entry.isDay)) \(entry.condition)")
-                        .font(.system(.footnote, design: .rounded)).lineLimit(1)
+                        .font(.system(.footnote, design: .rounded)).lineLimit(1).minimumScaleFactor(0.8)
                     Text("H \(SkyText.temp(entry.highC, fahrenheit: entry.fahrenheit))  L \(SkyText.temp(entry.lowC, fahrenheit: entry.fahrenheit))")
                         .font(.system(.caption, design: .rounded)).opacity(0.85)
                 }
@@ -250,31 +245,50 @@ struct SkyWidgetView: View {
             .foregroundStyle(.white)
             .overlay(alignment: .bottomTrailing) { failedNote }
         default: // systemSmall
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.place).font(.system(.caption, design: .rounded).weight(.medium)).lineLimit(1).opacity(0.9)
-                Spacer(minLength: 0)
-                HStack(alignment: .bottom) {
-                    Text(entry.temp)
-                        .font(.system(size: 40, weight: .semibold, design: .rounded))
-                        .contentTransition(.numericText())
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(entry.place).font(.system(.caption, design: .rounded).weight(.medium)).lineLimit(1).opacity(0.9)
+                        Text(entry.temp)
+                            .font(.system(size: 38, weight: .semibold, design: .rounded))
+                            .contentTransition(.numericText())
+                        Text(entry.condition).font(.system(.caption2, design: .rounded)).lineLimit(1).minimumScaleFactor(0.8)
+                    }
                     Spacer(minLength: 0)
-                    animalView(size: 42)
+                    puffView(height: 62)
                 }
-                Text(entry.condition).font(.system(.caption, design: .rounded)).lineLimit(1)
-                Text(entry.animal.line).font(.system(.caption2, design: .rounded)).lineLimit(1).opacity(0.85)
+                Spacer(minLength: 0)
+                speechBubble(entry.puff.line, font: .system(.caption2, design: .rounded).weight(.medium))
             }
             .foregroundStyle(.white)
             .overlay(alignment: .topTrailing) { failedNote }
         }
     }
 
-    /// The animal hops in when it changes.
-    private func animalView(size: CGFloat) -> some View {
-        Text(entry.animal.emoji)
-            .font(.system(size: size))
+    /// Puff hops in with a new outfit when the weather changes.
+    private func puffView(height: CGFloat) -> some View {
+        Image(entry.puff.image)
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
             .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-            .id(entry.animal.emoji)
+            .id(entry.puff.image)
             .transition(.push(from: .bottom))
+    }
+
+    /// Puff's message in a little speech bubble; wraps instead of getting cut off.
+    private func speechBubble(_ text: String, font: Font) -> some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(Color(red: 0.11, green: 0.15, blue: 0.25))
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .minimumScaleFactor(0.75)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
+            .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     @ViewBuilder private var failedNote: some View {
@@ -290,7 +304,7 @@ struct SkyMoodWidget: Widget {
             SkyWidgetView(entry: entry)
         }
         .configurationDisplayName("Sky Mood")
-        .description("Your weather animal and the temperature where you are.")
+        .description("Puff, dressed for the weather where you are, with a message.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }

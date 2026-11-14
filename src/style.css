@@ -2194,3 +2194,8 @@ body.gaming #mist {
 .native .foot .kbd-hint {
   display: none;
 }
+
+.toast {
+  cursor: pointer;
+  line-height: 1.35;
+}

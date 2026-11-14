@@ -134,33 +134,33 @@ npm run ios:sync   # rebuild and copy into the iOS project, then press Run in Xc
 
 ### Widgets and the Dynamic Island
 
-The iOS app includes a **weather animal** that changes with the weather where you are:
+The iOS app's widgets and Dynamic Island show **Puff**, the raindrop from the app, dressed for the
+weather where you are, with a message (a new one every few hours):
 
-| Weather | Animal |
+| Weather | Puff |
 | --- | --- |
-| Sunny | 🦎 Lizard, sunbathing on a rock |
-| Hot (28°C / 82°F+) | 🐪 Camel |
-| Partly cloudy | 🐝 Bee |
-| Cloudy | 🐑 Sheep |
-| Fog | 🦔 Hedgehog |
-| Drizzle / rain | 🦆 Duck |
-| Heavy rain | 🐸 Frog |
-| Snow | 🐧 Penguin |
-| Thunderstorm | 🐢 Turtle, hiding in its shell |
-| Windy (40 km/h+) | 🦅 Eagle |
-| Very cold (−5°C / 23°F or less) | 🐻‍❄️ Polar bear |
-| Clear night | 🦉 Owl |
+| Rain / drizzle | ☂️ Umbrella: "Splish splash! Umbrella time." |
+| Thunderstorm | ☂️ Umbrella, surprised face: "Eek! Hold on to your umbrella!" |
+| Snow, or below 5°C | 🧣 Beanie and scarf: "Snowball fight?" |
+| Clear night | 😴 Nightcap and zzz: "Zzz… good night!" |
+| Hot (28°C / 82°F+) | 😎 Sunglasses and a sweat drop: "Melting… need ice cream!" |
+| Windy (40 km/h+) | Leaning into the wind: "Whoa, hold me!" |
+| Fog | Surprised face: "Hello? Anyone out there?" |
+| Sunny | 😎 Sunglasses: "Sun's out, fun's out!" |
+| Cloudy | Plain Puff: "Cozy and gray today." |
+
+Puff's pictures live in `ios/App/SkyWidget/Assets.xcassets` (rendered from the app's own Puff).
 
 - **Widgets** (Home Screen: small and medium; Lock Screen: round, rectangular and inline). They fetch
   the weather themselves for your current location, refresh about every hour, and line up the next
-  few hours so the animal changes on its own. Add one by long-pressing the Home Screen → **Edit** →
+  few hours so Puff changes outfits on its own. Add one by long-pressing the Home Screen → **Edit** →
   **Add Widget** → **Sky Mood**.
 - **Dynamic Island / Lock Screen** (Live Activity): tap **🏝️ Dynamic Island** in the app. It updates
   whenever the app loads new weather. iOS removes Live Activities after about 8 hours; the app brings
   it back the next time you open it. iPhones without a Dynamic Island show it on the Lock Screen.
 
 The native code is in `ios/App/SkyWidget/` (widget + Live Activity), `ios/App/Shared/SkyMoodShared.swift`
-(weather animal, used by both) and `ios/App/App/SkyMoodNativePlugin.swift` (lets the web code control
+(Puff's outfit and message, used by both) and `ios/App/App/SkyMoodNativePlugin.swift` (lets the web code control
 the island). The app now needs **iOS 17** or newer.
 
 **First build after updating:** in Xcode, click the project, select the **SkyWidgetExtension** target,

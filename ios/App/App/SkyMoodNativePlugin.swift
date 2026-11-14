@@ -4,6 +4,7 @@
 import Foundation
 import Capacitor
 import WidgetKit
+import CoreLocation
 #if canImport(ActivityKit)
 import ActivityKit
 #endif
@@ -78,7 +79,7 @@ public class SkyMoodNativePlugin: CAPPlugin, CAPBridgedPlugin {
             call.reject("The Dynamic Island needs iOS 16.2 or newer.")
             return
         }
-        let place = call.getString("place") ?? "Sky Mood"
+        let givenPlace = call.getString("place") ?? "Sky Mood"
         let code = call.getInt("code") ?? 3
         let tempC = call.getDouble("tempC") ?? 0
         let isDay = call.getBool("isDay") ?? true
@@ -87,14 +88,13 @@ public class SkyMoodNativePlugin: CAPPlugin, CAPBridgedPlugin {
         let lowC = call.getDouble("lowC") ?? tempC
         let fahrenheit = call.getBool("fahrenheit") ?? SkyText.prefersFahrenheit
 
-        let animal = SkyAnimal.forWeather(code: code, tempC: tempC, windKmh: wind, isDay: isDay)
+        let puff = SkyPuff.forWeather(code: code, tempC: tempC, windKmh: wind, isDay: isDay)
         let state = SkyMoodAttributes.ContentState(
             temp: SkyText.temp(tempC, fahrenheit: fahrenheit),
             condition: SkyText.label(code: code),
             weatherEmoji: SkyText.emoji(code: code, isDay: isDay),
-            animalEmoji: animal.emoji,
-            animalName: animal.name,
-            animalLine: animal.line,
+            puffImage: puff.image,
+            puffLine: puff.line,
             high: SkyText.temp(highC, fahrenheit: fahrenheit),
             low: SkyText.temp(lowC, fahrenheit: fahrenheit),
             isDay: isDay,
@@ -103,14 +103,24 @@ public class SkyMoodNativePlugin: CAPPlugin, CAPBridgedPlugin {
         // After two hours without an update iOS shows it as out of date.
         let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(2 * 60 * 60))
 
+        let lat = call.getDouble("lat")
+        let lon = call.getDouble("lon")
+
         Task {
+            // "Your location" → the real town name, e.g. "Zagreb"
+            var place = givenPlace
+            if givenPlace == "Your location", let lat = lat, let lon = lon,
+               let mark = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: lat, longitude: lon)).first,
+               let town = mark.locality ?? mark.name {
+                place = town
+            }
             let existing = Activity<SkyMoodAttributes>.activities
             if let current = existing.first, current.attributes.place == place {
                 await current.update(content)
                 for extra in existing.dropFirst() {
                     await extra.end(nil, dismissalPolicy: .immediate)
                 }
-                call.resolve(["active": true, "animal": animal.emoji])
+                call.resolve(["active": true, "line": puff.line])
                 return
             }
             if existing.isEmpty && !startIfMissing {
@@ -127,7 +137,7 @@ public class SkyMoodNativePlugin: CAPPlugin, CAPBridgedPlugin {
             }
             do {
                 _ = try Activity<SkyMoodAttributes>.request(attributes: SkyMoodAttributes(place: place), content: content, pushType: nil)
-                call.resolve(["active": true, "animal": animal.emoji])
+                call.resolve(["active": true, "line": puff.line])
             } catch {
                 call.reject("Couldn't show it in the Dynamic Island: \(error.localizedDescription)")
             }
