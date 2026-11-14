@@ -575,30 +575,42 @@ requestAnimationFrame(uiLoop);
 
 // ---------- loading ----------
 
-// Messages wait their turn so an important one is never replaced straight away.
+// Background hints wait their turn; anything you just did (tapped a button) shows straight away.
 const toastQueue = [];
-let toastBusy = false;
+let toastTimer = null;
+let lastTap = 0;
+addEventListener('pointerdown', () => (lastTap = Date.now()), true);
 function toast(msg, ms = 4500) {
-  if (toastQueue.some((t) => t.msg === msg)) return;
-  toastQueue.push({ msg, ms });
-  if (!toastBusy) nextToast();
+  const urgent = Date.now() - lastTap < 3000; // a reply to something you just tapped
+  if (toastQueue.some((t) => t.msg === msg) || $('toast').textContent === msg && !$('toast').hidden) return;
+  if (urgent) {
+    toastQueue.unshift({ msg, ms });
+    nextToast(); // replaces whatever is showing; that hint comes back afterwards
+  } else {
+    toastQueue.push({ msg, ms });
+    if (!toastTimer) nextToast();
+  }
 }
 function nextToast() {
-  const t = toastQueue.shift();
+  clearTimeout(toastTimer);
   const el = $('toast');
+  const t = toastQueue.shift();
   if (!t) {
-    toastBusy = false;
+    toastTimer = null;
     el.hidden = true;
     return;
   }
-  toastBusy = true;
   el.textContent = t.msg;
   el.hidden = false;
-  setTimeout(() => {
+  // Longer messages stay longer (about a second per 15 characters)
+  const ms = Math.max(t.ms, 2500 + t.msg.length * 65);
+  toastTimer = setTimeout(() => {
     el.hidden = true;
-    setTimeout(nextToast, 250);
-  }, toastQueue.length ? Math.min(t.ms, 3000) : t.ms);
+    toastTimer = setTimeout(nextToast, 250);
+  }, ms);
 }
+// Tap a message to dismiss it
+$('toast').addEventListener('click', () => nextToast());
 
 async function load() {
   if (!state.loc) return;
@@ -1334,7 +1346,7 @@ function syncEdgeColor() {
 setInterval(syncEdgeColor, 500);
 
 // ---------- iPhone app: Dynamic Island + widgets ----------
-// Native Swift code in ios/App/App/SkyMoodNativePlugin.swift. The animal is picked in Swift
+// Native Swift code in ios/App/App/SkyMoodNativePlugin.swift. Puff's outfit and message are picked in Swift
 // (ios/App/Shared/SkyMoodShared.swift) so the island and the widgets always agree.
 
 const SkyNative = isNative ? registerPlugin('SkyMoodNative') : null;
@@ -1409,13 +1421,13 @@ $('islandBtn').addEventListener('click', async () => {
       await SkyNative.hideIsland();
       store.set('island', false);
       setIslandButton(false);
-      toast('Removed your weather animal from the Dynamic Island.');
+      toast('Removed Puff from the Dynamic Island.');
     } else {
       const r = await SkyNative.showIsland(nativePayload());
       store.set('island', true);
       setIslandButton(true);
       buzz('success');
-      toast(`${r.animal || '🐾'} Your weather animal is in the Dynamic Island (and on the Lock Screen).`, 6000);
+      toast(`💧 Puff is in the Dynamic Island: “${r.line || "Hi!"}” (go to the Home Screen to see it)`, 7000);
     }
   } catch (err) {
     toast(err?.message || 'Couldn’t show it in the Dynamic Island.', 6000);

@@ -89,30 +89,55 @@ enum SkyText {
     }
 }
 
-/// The weather animal: a different animal for every kind of weather.
-struct SkyAnimal: Codable, Hashable {
-    let emoji: String
-    let name: String
+/// Puff, the raindrop from the app, dressed for the weather, with something to say.
+/// `image` is an image in the widget extension's asset catalog (SkyWidget/Assets.xcassets).
+struct SkyPuff: Codable, Hashable {
+    let image: String
     let line: String
 
-    static func forWeather(code: Int, tempC: Double, windKmh: Double, isDay: Bool) -> SkyAnimal {
-        switch SkyKind(code: code) {
-        case .storm: return SkyAnimal(emoji: "🐢", name: "Turtle", line: "Hiding in its shell")
-        case .snow: return SkyAnimal(emoji: "🐧", name: "Penguin", line: "Feels right at home")
-        case .heavy: return SkyAnimal(emoji: "🐸", name: "Frog", line: "Throwing a pond party")
-        case .rain, .drizzle: return SkyAnimal(emoji: "🦆", name: "Duck", line: "Splashing in puddles")
-        case .fog: return SkyAnimal(emoji: "🦔", name: "Hedgehog", line: "Lost in the fog")
-        default: break
+    static func forWeather(code: Int, tempC: Double, windKmh: Double, isDay: Bool, date: Date = Date()) -> SkyPuff {
+        let kind = SkyKind(code: code)
+        let look: String
+        let lines: [String]
+        switch kind {
+        case .storm:
+            look = "PuffStorm"
+            lines = ["Eek! Hold on to your umbrella!", "Thunder! I'm staying inside.", "That was a loud one!"]
+        case .rain, .heavy, .drizzle:
+            look = "PuffRain"
+            lines = kind == .heavy
+                ? ["It's pouring! Umbrella up!", "Puddles everywhere. Wheee!", "Boots and umbrella today!"]
+                : ["Splish splash! Umbrella time.", "I love puddles!", "Good thing I brought my umbrella."]
+        case .snow:
+            look = "PuffSnow"
+            lines = ["Snowball fight?", "Brrr! Hot chocolate time.", "Look, I'm a snow-drop!"]
+        default:
+            if !isDay {
+                look = "PuffNight"
+                lines = ["Zzz… good night!", "Five more minutes…", "Shh, the moon is listening."]
+            } else if tempC < 5 {
+                look = "PuffSnow"
+                lines = ["Brrr! Wrap up warm.", "My nose is an ice cube!", "Hat and scarf weather."]
+            } else if tempC >= 28 {
+                look = "PuffHot"
+                lines = ["Melting… need ice cream!", "Drink lots of water!", "I might evaporate!"]
+            } else if windKmh >= 40 {
+                look = "PuffWindy"
+                lines = ["Whoa, hold me!", "Wheee, the wind!", "Hold on to your hat!"]
+            } else if kind == .fog {
+                look = "PuffFog"
+                lines = ["Hello? Anyone out there?", "Where did the world go?", "Drive slowly in the fog!"]
+            } else if kind == .clear || kind == .partly {
+                look = "PuffSunny"
+                lines = ["Sunglasses on!", "Sun's out, fun's out!", "Perfect day for a walk!"]
+            } else {
+                look = "PuffCloudy"
+                lines = ["Cozy and gray today.", "A good day for a book.", "No rain yet. Fingers crossed!"]
+            }
         }
-        if windKmh >= 40 { return SkyAnimal(emoji: "🦅", name: "Eagle", line: "Gliding on the wind") }
-        if tempC <= -5 { return SkyAnimal(emoji: "🐻‍❄️", name: "Polar bear", line: "Loving the cold") }
-        if !isDay { return SkyAnimal(emoji: "🦉", name: "Owl", line: "Wide awake tonight") }
-        if tempC >= 28 { return SkyAnimal(emoji: "🐪", name: "Camel", line: "Perfect camel weather") }
-        switch SkyKind(code: code) {
-        case .clear: return SkyAnimal(emoji: "🦎", name: "Lizard", line: "Sunbathing on a rock")
-        case .partly: return SkyAnimal(emoji: "🐝", name: "Bee", line: "Busy between the clouds")
-        default: return SkyAnimal(emoji: "🐑", name: "Sheep", line: "Blending in with the clouds")
-        }
+        // A different line every few hours, the same one within those hours.
+        let slot = Int(date.timeIntervalSince1970 / (3 * 3600))
+        return SkyPuff(image: look, line: lines[abs(slot) % lines.count])
     }
 }
 
@@ -124,9 +149,8 @@ struct SkyMoodAttributes: ActivityAttributes {
         var temp: String
         var condition: String
         var weatherEmoji: String
-        var animalEmoji: String
-        var animalName: String
-        var animalLine: String
+        var puffImage: String
+        var puffLine: String
         var high: String
         var low: String
         var isDay: Bool

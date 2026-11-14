@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F85D988B70BF3B18346F7153 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 94BF7687FEAF93C464848E3F /* Assets.xcassets */; };
 		3280859595BF619572BE5C46 /* SkyWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142DDD336A006AECDCE26044 /* SkyWidgetBundle.swift */; };
 		AEAABB3D8872A2F6F747188C /* SkyWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D37FA51D210AF9F72EEF0BB4 /* SkyWidget.swift */; };
 		4BFD276A44C0C636B98EDBC6 /* SkyLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81C02A63BE981AE8CA7850DF /* SkyLiveActivity.swift */; };
@@ -51,6 +52,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		94BF7687FEAF93C464848E3F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FF29158AAB82901B638FD52E /* SkyWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SkyWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		142DDD336A006AECDCE26044 /* SkyWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkyWidgetBundle.swift; sourceTree = "<group>"; };
 		D37FA51D210AF9F72EEF0BB4 /* SkyWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkyWidget.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 				D37FA51D210AF9F72EEF0BB4 /* SkyWidget.swift */,
 				81C02A63BE981AE8CA7850DF /* SkyLiveActivity.swift */,
 				0C67E1F2F191F806812C74DC /* Info.plist */,
+				94BF7687FEAF93C464848E3F /* Assets.xcassets */,
 			);
 			path = SkyWidget;
 			sourceTree = "<group>";
@@ -236,6 +239,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F85D988B70BF3B18346F7153 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
