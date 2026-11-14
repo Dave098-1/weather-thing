@@ -2145,3 +2145,32 @@ body.gaming #mist {
     align-items: flex-start;
   }
 }
+
+/* ---------- iPhone notch / home indicator (safe areas) ---------- */
+
+#app {
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+.game-hud,
+.globe-top {
+  top: max(16px, env(safe-area-inset-top));
+}
+
+.cmp-card {
+  top: max(16px, env(safe-area-inset-top));
+}
+
+.cmp-close,
+.lab {
+  bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+/* In the app there's no keyboard, so drop the "press D" hint */
+.native .foot kbd,
+.native .foot .kbd-hint {
+  display: none;
+}

@@ -13,6 +13,28 @@ import { fetchAir, aqiLevel, pollenLevel, hazeFor } from './air.js';
 import { makeShareImage, shareOrDownload, mascotImage } from './share.js';
 import { CatchGame, themeFor } from './game.js';
 import { Wardrobe, ITEMS } from './wardrobe.js';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+import { StatusBar, Style } from '@capacitor/status-bar';
+
+// Running inside the iOS app (Capacitor) rather than a browser?
+const isNative = Capacitor.isNativePlatform();
+if (isNative) {
+  document.documentElement.classList.add('native');
+  StatusBar.setStyle({ style: Style.Dark }).catch(() => {}); // white status-bar text
+}
+
+/** A little vibration in the iOS app; does nothing on the web. */
+function buzz(kind = 'light') {
+  if (!isNative) return;
+  const run =
+    kind === 'error'
+      ? Haptics.notification({ type: NotificationType.Error })
+      : kind === 'success'
+        ? Haptics.notification({ type: NotificationType.Success })
+        : Haptics.impact({ style: kind === 'heavy' ? ImpactStyle.Heavy : kind === 'medium' ? ImpactStyle.Medium : ImpactStyle.Light });
+  run.catch(() => {});
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -81,9 +103,11 @@ const state = {
 const scene = new Scene($('sky'), { reducedMotion });
 const sound = new Soundscape();
 const mascot = new Mascot($('mascot'));
+$('mascot').addEventListener('click', () => buzz('light'));
 
 scene.onStrike = (closeness) => {
   sound.thunder(closeness);
+  if (closeness > 0.6) buzz('medium');
   if (!reducedMotion) {
     // The lightning lights up the glass cards too
     document.body.classList.remove('flash');
@@ -1151,6 +1175,7 @@ $('shareBtn').addEventListener('click', async () => {
 
 function shakeGlobe() {
   scene.flurry();
+  buzz('heavy');
   bump($('globeShakeBtn'), 'bump');
 }
 $('globeShakeBtn').addEventListener('click', shakeGlobe);
@@ -1232,8 +1257,10 @@ const game = new CatchGame({
   reducedMotion,
   getTheme: () => themeFor(scene.p, scene.nightF),
   getPuffImage: () => mascotImage($('mascot'), { skip: ['.m-umbrella', '.m-zzz'] }),
+  onCatch: (kind) => buzz(kind === 'bad' ? 'error' : kind === 'gold' ? 'medium' : 'light'),
   onEnd: (score) => {
     const r = wardrobe.recordScore(score);
+    buzz(r.isBest ? 'success' : 'light');
     if (r.unlocked.length && !$('wardrobe').hidden) renderWardrobe();
     return { ...r, best: wardrobe.data.best };
   },
@@ -1247,7 +1274,7 @@ $('gameClose').addEventListener('click', () => game.close());
 
 // ---------- offline support ----------
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator && import.meta.env.PROD && !isNative) {
   addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
 

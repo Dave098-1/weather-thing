@@ -1,0 +1,10 @@
+{
+  "appId": "io.github.dave0981.skymood",
+  "appName": "Sky Mood",
+  "webDir": "dist",
+  "backgroundColor": "#0b1030",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0b1030"
+  }
+}

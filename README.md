@@ -95,3 +95,45 @@ npm run preview  # serve the production build
 `.github/workflows/deploy-pages.yml` builds the site and publishes it whenever `main` changes.
 One-time setup: in the repository go to **Settings → Pages → Build and deployment → Source** and
 choose **GitHub Actions**. The site is then served at `https://<user>.github.io/weather-thing/`.
+
+## iPhone app (iOS)
+
+The same code also builds a real iOS app with [Capacitor](https://capacitorjs.com/). The Xcode project
+lives in `ios/`. In the app you also get haptics (little vibrations) and white status-bar text.
+
+### First time on your Mac
+
+1. Install **Xcode** from the Mac App Store and open it once so it can finish setting up.
+2. Install **Node.js** (the LTS version from [nodejs.org](https://nodejs.org/)).
+3. Get the code and install everything:
+   ```bash
+   git clone https://github.com/Dave098-1/weather-thing.git
+   cd weather-thing
+   npm install
+   ```
+4. Build the site, copy it into the app and open Xcode:
+   ```bash
+   npm run ios
+   ```
+5. In Xcode, click **App** in the left sidebar, then **Signing & Capabilities**, and pick your Apple ID
+   under **Team** (Xcode → Settings → Accounts lets you add it). If Xcode says the bundle identifier is
+   taken, change `io.github.dave0981.skymood` to something else unique.
+6. Plug in your iPhone (or pick a simulator) at the top of the window and press **▶ Run**.
+   The first time on a real phone: on the iPhone go to **Settings → General → VPN & Device Management**
+   and trust your developer profile. You may also need to turn on **Developer Mode**
+   (Settings → Privacy & Security).
+
+With a free Apple ID the app works for 7 days before you need to run it again from Xcode. The Apple
+Developer Program ($99/year) removes that limit and lets you use TestFlight and the App Store.
+
+### After changing the website code
+
+```bash
+npm run ios:sync   # rebuild and copy into the iOS project, then press Run in Xcode
+```
+
+### Before publishing to the App Store
+
+- Apple may reject apps that are "just a website", so native extras (a home-screen widget, rain
+  notifications) make approval more likely.
+- Open-Meteo's free plan is for non-commercial use: fine for a free app without ads.
