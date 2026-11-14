@@ -108,3 +108,47 @@ export function subsolarPoint(date = new Date()) {
   if (lon < -180) lon += 360;
   return { lat, lon };
 }
+
+const PHASES = [
+  ['New moon', '🌑'],
+  ['Waxing crescent', '🌒'],
+  ['First quarter', '🌓'],
+  ['Waxing gibbous', '🌔'],
+  ['Full moon', '🌕'],
+  ['Waning gibbous', '🌖'],
+  ['Last quarter', '🌗'],
+  ['Waning crescent', '🌘'],
+];
+
+/**
+ * Moon details for a day. dayStartSec is local midnight (unix seconds).
+ * Rise and set are found by sampling the moon's altitude every 10 minutes.
+ */
+export function moonInfo(now, lat, lon, dayStartSec) {
+  const { phase, fraction } = moonIllumination(now);
+  const idx = Math.round(phase * 8) % 8;
+  const [name, emoji] = PHASES[idx];
+  let rise = null;
+  let set = null;
+  let prev = moonPosition(new Date(dayStartSec * 1000), lat, lon).altitude;
+  for (let m = 10; m <= 24 * 60; m += 10) {
+    const t = dayStartSec + m * 60;
+    const alt = moonPosition(new Date(t * 1000), lat, lon).altitude;
+    if (prev < 0 && alt >= 0 && rise == null) rise = t - 600 * (alt / (alt - prev));
+    if (prev >= 0 && alt < 0 && set == null) set = t - 600 * (alt / (alt - prev));
+    prev = alt;
+  }
+  const daysToFull = (((0.5 - phase) % 1) + 1) % 1 * 29.53;
+  return { phase, fraction, name, emoji, rise, set, daysToFull };
+}
+
+/** SVG path for the lit part of the moon. */
+export function moonPathD(phase, cx, cy, r) {
+  const k = Math.cos(2 * Math.PI * phase); // 1 = new, -1 = full
+  const rx = Math.abs(k) * r;
+  if (phase < 0.5) {
+    // lit on the right
+    return `M${cx} ${cy - r} A${r} ${r} 0 0 1 ${cx} ${cy + r} A${rx} ${r} 0 0 ${k > 0 ? 0 : 1} ${cx} ${cy - r}Z`;
+  }
+  return `M${cx} ${cy + r} A${r} ${r} 0 0 1 ${cx} ${cy - r} A${rx} ${r} 0 0 ${k > 0 ? 0 : 1} ${cx} ${cy + r}Z`;
+}

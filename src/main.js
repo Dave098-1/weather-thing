@@ -1,12 +1,18 @@
 import { Scene } from './scene.js';
 import { fetchForecast, searchCities, describe, weatherToScene, heatFor } from './weather.js';
-import { skyAt } from './astro.js';
+import { skyAt, moonInfo, moonPathD } from './astro.js';
 import { Soundscape } from './audio.js';
 import { moodFor } from './mood.js';
 import { Mascot } from './mascot.js';
 import { renderDays } from './forecast.js';
 import { Compare } from './compare.js';
 import { clamp, hexToRgb, mixRgb, rgba } from './util.js';
+import { Mist } from './mist.js';
+import { tipsFor } from './tips.js';
+import { fetchAir, aqiLevel, pollenLevel, hazeFor } from './air.js';
+import { makeShareImage, shareOrDownload, mascotImage } from './share.js';
+import { CatchGame, themeFor } from './game.js';
+import { Wardrobe, ITEMS } from './wardrobe.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -43,6 +49,15 @@ const WEATHER_PRESETS = {
   Heatwave: { ...CALM, heat: 1, cloud: 0.02, wind: 5, temp: 37 },
 };
 
+const EXTRA_PRESETS = {
+  Rainbow: { rainbow: 1, rain: 0.12, snow: 0, storm: 0, fog: 0, cloud: 0.35, sunAlt: 16, sunAz: 1.1, moonAlt: -20 },
+  Aurora: { aurora: 1, rain: 0, snow: 0, storm: 0, fog: 0, cloud: 0.05, sunAlt: -28, moonAlt: -20 },
+  Autumn: { season: 1 },
+  Blossom: { season: 2, rain: 0, snow: 0 },
+  Fireworks: { fireworks: 1, rain: 0, snow: 0, storm: 0, fog: 0, cloud: 0.1, sunAlt: -25, moonAlt: -20 },
+  Smog: { haze: 1, cloud: 0.3 },
+};
+
 const TIME_PRESETS = {
   Dawn: { sunAlt: 2, sunAz: -1.3, moonAlt: -20 },
   Noon: { sunAlt: 55, sunAz: 0, moonAlt: -20 },
@@ -55,7 +70,9 @@ const state = {
   data: null,
   offset: 0,
   unit: store.get('unit') || (/^(en-US|en-LR|my)/.test(navigator.language || '') ? 'F' : 'C'),
-  override: { weather: null, time: null },
+  override: { weather: null, time: null, extra: null },
+  air: null,
+  favs: store.get('favs') || [],
   playTimer: null,
 };
 
@@ -135,14 +152,75 @@ function updateScene() {
     const s = sliceAt(state.offset);
     const sc = weatherToScene(s);
     const sky = skyAt(new Date(s.time * 1000), state.loc.lat, state.loc.lon);
-    target = { ...sc, ...sky, temp: s.temp, heat: heatFor(s.temp, sc, sky.sunAlt) };
+    const prev = state.offset > 0 ? sliceAt(state.offset - 1) : state.data.hourly[Math.max(0, currentIndex() - 1)];
+    target = {
+      ...sc,
+      ...sky,
+      temp: s.temp,
+      heat: heatFor(s.temp, sc, sky.sunAlt),
+      rainbow: rainbowFor(sc, sky, prev),
+      aurora: auroraFor(state.loc.lat, sky),
+      haze: hazeFor(state.air),
+      ...seasonFor(s.time, sky),
+    };
   } else {
     target = { ...scene.target, ...skyAt(new Date(), state.loc.lat, state.loc.lon) };
   }
-  if (state.override.weather) Object.assign(target, WEATHER_PRESETS[state.override.weather]);
+  if (state.override.weather) Object.assign(target, WEATHER_PRESETS[state.override.weather], { rainbow: 0, aurora: 0 });
   if (state.override.time) Object.assign(target, TIME_PRESETS[state.override.time]);
+  if (state.override.extra) Object.assign(target, EXTRA_PRESETS[state.override.extra]);
   scene.setTarget(target);
   mascot.update({ ...scene.target, ...target });
+  mist.setLevel(clamp(Math.max(target.rain * 1.2 - 0.1, target.fog * 0.9), 0, 0.9));
+  if (state.data && state.offset === 0 && !state.override.weather && !state.override.time && !state.override.extra) {
+    recordSightings(target);
+  }
+}
+
+/** A rainbow: sun fairly low and not hidden, with light rain now or rain that just stopped. */
+function rainbowFor(sc, sky, prev) {
+  if (sky.sunAlt < 2 || sky.sunAlt > 42 || sc.cloud > 0.85 || sc.snow > 0 || sc.storm > 0.3) return 0;
+  if (sc.rain > 0.05 && sc.rain < 0.5) return 0.8;
+  if (sc.rain === 0 && (prev?.precip ?? 0) > 0.1) return 1;
+  return 0;
+}
+
+/** Northern (and southern) lights on dark nights far from the equator. */
+function auroraFor(lat, sky) {
+  const a = Math.abs(lat);
+  if (sky.sunAlt > -12 || a < 55) return 0;
+  return a >= 62 ? 0.9 : 0.45;
+}
+
+/** Seasonal touches from the local date: autumn leaves, spring blossom, New Year fireworks. */
+function seasonFor(sec, sky) {
+  let month = 0;
+  let day = 0;
+  let hour = 0;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: state.data.timezone,
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(sec * 1000));
+    const get = (t) => Number(parts.find((p) => p.type === t)?.value);
+    month = get('month');
+    day = get('day');
+    hour = get('hour');
+  } catch {
+    const d = new Date(sec * 1000);
+    month = d.getMonth() + 1;
+    day = d.getDate();
+    hour = d.getHours();
+  }
+  const south = state.loc.lat < 0;
+  const autumn = south ? month >= 3 && month <= 5 : month >= 9 && month <= 11;
+  const spring = south ? month >= 9 && month <= 11 : month >= 3 && month <= 5;
+  const newYear = (month === 12 && day === 31 && hour >= 20) || (month === 1 && day === 1 && hour < 3);
+  $('globeShakeBtn').hidden = !(month === 12 && day <= 26) && state.override.extra !== 'Snow globe';
+  return { season: autumn ? 1 : spring ? 2 : 0, fireworks: newYear && sky.sunAlt < -6 ? 1 : 0 };
 }
 
 // ---------- UI ----------
@@ -456,27 +534,59 @@ requestAnimationFrame(uiLoop);
 
 // ---------- loading ----------
 
-let toastTimer;
+// Messages wait their turn so an important one is never replaced straight away.
+const toastQueue = [];
+let toastBusy = false;
 function toast(msg, ms = 4500) {
+  if (toastQueue.some((t) => t.msg === msg)) return;
+  toastQueue.push({ msg, ms });
+  if (!toastBusy) nextToast();
+}
+function nextToast() {
+  const t = toastQueue.shift();
   const el = $('toast');
-  el.textContent = msg;
+  if (!t) {
+    toastBusy = false;
+    el.hidden = true;
+    return;
+  }
+  toastBusy = true;
+  el.textContent = t.msg;
   el.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), ms);
+  setTimeout(() => {
+    el.hidden = true;
+    setTimeout(nextToast, 250);
+  }, toastQueue.length ? Math.min(t.ms, 3000) : t.ms);
 }
 
 async function load() {
   if (!state.loc) return;
   try {
-    const data = await fetchForecast(state.loc.lat, state.loc.lon);
+    const loc = state.loc;
+    fetchAir(loc.lat, loc.lon)
+      .then((air) => {
+        if (state.loc !== loc) return;
+        state.air = air;
+        renderAir();
+        updateScene();
+      })
+      .catch(() => {
+        state.air = null;
+        renderAir();
+      });
+    const data = await fetchForecast(loc.lat, loc.lon);
+    if (state.loc !== loc) return;
     state.data = data;
     state.offset = Math.min(state.offset, 24);
     renderChart();
     renderForecastCards();
+    renderTips();
+    renderMoon();
     updateUI();
     updateScene();
     compare.refresh();
     hideSplash();
+    if (data.offline) toast('📴 You’re offline, so this is the last saved forecast.', 6000);
   } catch (err) {
     console.error(err);
     if (!state.data) $('cond').textContent = 'Couldn’t reach the weather service.';
@@ -489,8 +599,10 @@ async function load() {
 function setLocation(loc) {
   if (state.loc && state.loc.name !== loc.name) bump(document.querySelector('.hero'), 'whoosh');
   state.loc = loc;
+  state.air = null;
   store.set('loc', loc);
   $('locName').textContent = loc.name;
+  renderFavs();
   stopPlaying();
   state.offset = 0;
   $('scrub').value = 0;
@@ -599,6 +711,8 @@ $('unitBtn').addEventListener('click', () => {
   if (state.data) {
     renderChart();
     renderForecastCards();
+    renderTips();
+    renderAir();
     updateUI();
     compare.refresh();
   }
@@ -683,6 +797,11 @@ function buildLab() {
   };
   make($('labWeather'), WEATHER_PRESETS, 'weather');
   make($('labTime'), TIME_PRESETS, 'time');
+  make($('labExtra'), EXTRA_PRESETS, 'extra');
+  const globeBtn = document.createElement('button');
+  globeBtn.textContent = 'Snow globe';
+  globeBtn.addEventListener('click', shakeGlobe);
+  $('labExtra').appendChild(globeBtn);
   refreshLab();
 }
 
@@ -690,8 +809,10 @@ function refreshLab() {
   for (const [id, key] of [
     ['labWeather', 'weather'],
     ['labTime', 'time'],
+    ['labExtra', 'extra'],
   ]) {
     for (const b of $(id).children) {
+      if (b.dataset.name == null) continue;
       const active = (state.override[key] ?? 'Live') === b.dataset.name;
       b.classList.toggle('active', active);
     }
@@ -699,6 +820,7 @@ function refreshLab() {
 }
 
 function toggleLab(open = $('lab').hidden) {
+  if (open) $('wardrobe').hidden = true;
   $('lab').hidden = !open;
   $('labBtn').setAttribute('aria-pressed', String(open));
 }
@@ -715,12 +837,17 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     toggleLab(false);
     openSearch(false);
+    toggleWardrobe(false);
     if (compare.isOpen) compare.close();
     if (!$('globeView').hidden) closeGlobe();
+    if (!$('game').hidden) game.close();
     return;
   }
-  if (compare.isOpen || !$('globeView').hidden) return;
+  if (compare.isOpen || !$('globeView').hidden || !$('game').hidden) return;
+  if (e.target.matches('input, button, [role="slider"]') && e.key.startsWith('Arrow')) return;
   if (e.key === 'd' || e.key === 'D') toggleLab();
+  if (e.key === 'ArrowLeft') cycleFav(-1);
+  if (e.key === 'ArrowRight') cycleFav(1);
 });
 
 // ---------- 7-day cards ----------
@@ -834,6 +961,295 @@ addEventListener('pointermove', (e) => {
     mascot.look(e.clientX, e.clientY);
   });
 });
+
+// ---------- misty window ----------
+
+const mist = new Mist($('mist'), {
+  onFirstShow: () => setTimeout(() => toast('💧 The window has misted up. Draw on it!', 5000), 1500),
+});
+
+// ---------- what to wear ----------
+
+function renderTips() {
+  const hours = Array.from({ length: 25 }, (_, k) => sliceAt(k));
+  const { tips, walk } = tipsFor(hours, { fmtT, fmtTime });
+  const box = $('tips');
+  box.replaceChildren(
+    ...tips.map((t, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'tip-chip';
+      chip.style.setProperty('--i', i);
+      chip.textContent = `${t.icon} ${t.text}`;
+      return chip;
+    })
+  );
+  const w = $('walk');
+  w.replaceChildren();
+  if (walk) {
+    const b = document.createElement('button');
+    b.className = 'walk-btn';
+    b.title = 'Show that hour';
+    b.textContent = `${walk.icon} ${walk.text}`;
+    const small = document.createElement('small');
+    small.textContent = walk.detail;
+    b.append(' ', small);
+    b.addEventListener('click', () => {
+      stopPlaying();
+      setOffset(walk.k);
+      $('chartArea').scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
+    });
+    w.appendChild(b);
+  }
+  $('tipsBar').hidden = false;
+  mascot.extraLines = tips.slice(0, 3).map((t) => `${t.icon} ${t.text}!`);
+  const top = tips[0];
+  if (top) setTimeout(() => mascot.say(`${top.icon} ${top.text}!`), 1600);
+}
+
+// ---------- air quality & moon ----------
+
+function renderAir() {
+  const air = state.air;
+  const scale = state.unit === 'F' ? 'us' : 'eu';
+  const value = air ? (air[scale] ?? air[scale === 'us' ? 'eu' : 'us']) : null;
+  const usedScale = air && air[scale] == null ? (scale === 'us' ? 'eu' : 'us') : scale;
+  const lvl = aqiLevel(value, usedScale);
+  $('aqScale').textContent = lvl ? (usedScale === 'us' ? 'US AQI' : 'EU AQI') : '';
+  $('aqVal').textContent = lvl ? Math.round(value) : '--';
+  $('aqLabel').textContent = lvl ? lvl.label : 'Not available here';
+  $('aqIcon').textContent = lvl ? lvl.icon : '·';
+  $('aqBar').style.width = lvl ? `${Math.max(4, lvl.pct * 100)}%` : '0';
+  $('aqBar').style.background = lvl ? lvl.color : '';
+  const pol = air?.pollen;
+  const pl = pol ? pollenLevel(pol.value) : null;
+  $('pollen').textContent = pl
+    ? `🌼 ${pol.type[0].toUpperCase() + pol.type.slice(1)} pollen: ${pl}`
+    : '🌼 No pollen data here';
+}
+
+function renderMoon() {
+  const m = moonInfo(new Date(), state.loc.lat, state.loc.lon, state.data.daily[0].time);
+  $('moonLit').setAttribute('d', moonPathD(m.phase, 20, 20, 16));
+  $('moonPct').textContent = `${Math.round(m.fraction * 100)}% lit`;
+  $('moonName').textContent = m.name;
+  $('moonFull').textContent =
+    m.daysToFull < 0.75 || m.daysToFull > 28.8
+      ? 'Full moon tonight! 🌕'
+      : `Full moon in ${Math.round(m.daysToFull)} day${Math.round(m.daysToFull) === 1 ? '' : 's'}`;
+  const tf = { hour: 'numeric', minute: '2-digit' };
+  $('moonTimes').textContent = `↑ ${m.rise ? fmtTime(m.rise, tf) : '—'} · ↓ ${m.set ? fmtTime(m.set, tf) : '—'}`;
+}
+
+// ---------- favourite places ----------
+
+const sameLoc = (a, b) => a && b && Math.abs(a.lat - b.lat) < 0.01 && Math.abs(a.lon - b.lon) < 0.01;
+
+function saveFavs() {
+  store.set('favs', state.favs);
+  renderFavs();
+}
+
+function renderFavs() {
+  const isFav = state.favs.some((f) => sameLoc(f, state.loc));
+  $('favToggle').textContent = isFav ? '★ Saved (tap to remove)' : '☆ Save this place';
+  const list = $('favList');
+  list.replaceChildren(
+    ...state.favs.map((f) => {
+      const chip = document.createElement('span');
+      chip.className = 'fav-chip' + (sameLoc(f, state.loc) ? ' current' : '');
+      const go = document.createElement('button');
+      go.textContent = f.name.split(',')[0];
+      go.addEventListener('click', () => {
+        openSearch(false);
+        setLocation(f);
+      });
+      const x = document.createElement('button');
+      x.textContent = '×';
+      x.setAttribute('aria-label', `Remove ${f.name}`);
+      x.addEventListener('click', () => {
+        state.favs = state.favs.filter((g) => g !== f);
+        saveFavs();
+      });
+      chip.append(go, x);
+      return chip;
+    })
+  );
+  const dots = $('favDots');
+  dots.hidden = state.favs.length < 2;
+  dots.replaceChildren(
+    ...state.favs.map((f) => {
+      const d = document.createElement('i');
+      if (sameLoc(f, state.loc)) d.className = 'on';
+      return d;
+    })
+  );
+}
+
+$('favToggle').addEventListener('click', () => {
+  if (state.favs.some((f) => sameLoc(f, state.loc))) state.favs = state.favs.filter((f) => !sameLoc(f, state.loc));
+  else {
+    state.favs.push({ ...state.loc });
+    toast(`⭐ Saved ${state.loc.name.split(',')[0]}. Swipe sideways (or use ← →) to switch places.`);
+  }
+  saveFavs();
+});
+
+function cycleFav(dir) {
+  const favs = state.favs;
+  if (!favs.length || (favs.length === 1 && sameLoc(favs[0], state.loc))) {
+    toast('Save a few places with ☆ in the location menu, then swipe between them.');
+    return;
+  }
+  const i = favs.findIndex((f) => sameLoc(f, state.loc));
+  const next = i < 0 ? favs[0] : favs[(i + dir + favs.length) % favs.length];
+  setLocation(next);
+}
+
+let swipe = null;
+document.addEventListener('touchstart', (e) => {
+  const t = e.target;
+  if (e.touches.length !== 1 || t.closest('.scrubber, .days, .compare, .globe-view, .game, .lab, input, #mist.active')) {
+    swipe = null;
+    return;
+  }
+  swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+document.addEventListener('touchend', (e) => {
+  if (!swipe) return;
+  const dx = e.changedTouches[0].clientX - swipe.x;
+  const dy = e.changedTouches[0].clientY - swipe.y;
+  swipe = null;
+  if (Math.abs(dx) > 70 && Math.abs(dy) < 50 && state.favs.length) cycleFav(dx < 0 ? 1 : -1);
+});
+
+// ---------- share a picture ----------
+
+$('shareBtn').addEventListener('click', async () => {
+  const btn = $('shareBtn');
+  btn.disabled = true;
+  try {
+    const blob = await makeShareImage({
+      skyCanvas: $('sky'),
+      mascotEl: $('mascot'),
+      place: state.loc?.name || 'My sky',
+      temp: `${$('temp').textContent}°`,
+      cond: $('cond').textContent,
+      mood: $('mood').textContent,
+      iconUrl: document.querySelector('link[rel="icon"]').href,
+    });
+    const result = await shareOrDownload(blob, `The sky in ${state.loc?.name || 'my town'}`);
+    if (result === 'downloaded') toast('📸 Saved your sky as a picture.');
+  } catch (err) {
+    console.error(err);
+    toast('Couldn’t make the picture, sorry.');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- snow globe ----------
+
+function shakeGlobe() {
+  scene.flurry();
+  bump($('globeShakeBtn'), 'bump');
+}
+$('globeShakeBtn').addEventListener('click', shakeGlobe);
+
+// ---------- Puff's wardrobe ----------
+
+const wardrobe = new Wardrobe();
+mascot.setStyle(wardrobe.style);
+
+function renderWardrobe() {
+  for (const [id, slot] of [
+    ['wColors', 'color'],
+    ['wHats', 'hat'],
+  ]) {
+    $(id).replaceChildren(
+      ...ITEMS.filter((i) => i.slot === slot).map((item) => {
+        const b = document.createElement('button');
+        const unlocked = wardrobe.isUnlocked(item);
+        const worn = wardrobe.style[slot === 'color' ? 'color' : 'hat'] === item.id;
+        b.className = 'w-item' + (worn ? ' active' : '') + (unlocked ? '' : ' locked');
+        const icon = document.createElement('span');
+        icon.className = 'w-icon';
+        icon.textContent = unlocked ? item.icon : '🔒';
+        const name = document.createElement('span');
+        name.textContent = item.name;
+        b.append(icon, name);
+        if (!unlocked) {
+          const hint = document.createElement('small');
+          hint.textContent = item.hint;
+          b.append(hint);
+        }
+        b.setAttribute('aria-pressed', String(worn));
+        b.addEventListener('click', () => {
+          if (!wardrobe.equip(item)) {
+            toast(`🔒 ${item.hint} to unlock ${item.name}.`);
+            return;
+          }
+          mascot.setStyle(wardrobe.style);
+          mascot.poke();
+          renderWardrobe();
+        });
+        return b;
+      })
+    );
+  }
+}
+
+function toggleWardrobe(open = $('wardrobe').hidden) {
+  $('wardrobe').hidden = !open;
+  if (open) {
+    toggleLab(false);
+    renderWardrobe();
+  }
+}
+$('wardrobeBtn').addEventListener('click', () => toggleWardrobe());
+$('wardrobeClose').addEventListener('click', () => toggleWardrobe(false));
+
+function recordSightings(t) {
+  const kinds = [];
+  if (t.rain > 0.1) kinds.push('rain');
+  if (t.snow > 0.1) kinds.push('snow');
+  if (t.storm > 0.2) kinds.push('storm');
+  if (t.fog > 0.5) kinds.push('fog');
+  if (t.cloud < 0.3 && t.sunAlt > 0 && !t.rain && !t.snow) kinds.push('clear');
+  if (t.temp >= 28) kinds.push('hot');
+  if (t.wind >= 40) kinds.push('windy');
+  const unlocked = wardrobe.record(kinds);
+  if (unlocked.length) {
+    toast(`🎉 New for Puff: ${unlocked.map((i) => `${i.icon} ${i.name}`).join(', ')}. Open 👕 Wardrobe!`, 6000);
+    if (!$('wardrobe').hidden) renderWardrobe();
+  }
+}
+
+// ---------- mini-game ----------
+
+const game = new CatchGame({
+  el: $('game'),
+  canvas: $('gameCanvas'),
+  reducedMotion,
+  getTheme: () => themeFor(scene.p, scene.nightF),
+  getPuffImage: () => mascotImage($('mascot'), { skip: ['.m-umbrella', '.m-zzz'] }),
+  onEnd: (score) => {
+    const r = wardrobe.recordScore(score);
+    if (r.unlocked.length && !$('wardrobe').hidden) renderWardrobe();
+    return { ...r, best: wardrobe.data.best };
+  },
+});
+$('gameBtn').addEventListener('click', () => {
+  toggleLab(false);
+  toggleWardrobe(false);
+  game.open();
+});
+$('gameClose').addEventListener('click', () => game.close());
+
+// ---------- offline support ----------
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
 
 // ---------- start ----------
 

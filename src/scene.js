@@ -41,7 +41,16 @@ export const DEFAULT_SCENE = {
   moonPhase: 0.4,
   temp: 15,
   heat: 0,
+  rainbow: 0,
+  aurora: 0,
+  haze: 0,
+  season: 0, // 0 none, 1 autumn leaves, 2 spring blossom (switches instantly)
+  fireworks: 0, // 0/1 (switches instantly)
 };
+
+const DISCRETE = new Set(['season', 'fireworks']);
+const BLOSSOM_COLORS = ['#ffc4d6', '#ffb0c8', '#ffe1ea', '#ff9fbf', '#fff0f5'];
+const FIREWORK_COLORS = ['#ff6b6b', '#ffd36b', '#6bffb8', '#6bc6ff', '#c86bff', '#ffffff'];
 
 let sharedCloudSprites = null;
 
@@ -207,7 +216,8 @@ export class Scene {
     for (const key in this.target) {
       const a = this.p[key];
       const b = this.target[key];
-      if (key === 'windDir') this.p[key] = lerpAngleDeg(a, b, k);
+      if (DISCRETE.has(key)) this.p[key] = b;
+      else if (key === 'windDir') this.p[key] = lerpAngleDeg(a, b, k);
       else if (key === 'sunAz' || key === 'moonAz') this.p[key] = lerpAngle(a, b, k);
       else this.p[key] = lerp(a, b, k);
     }
@@ -222,6 +232,7 @@ export class Scene {
     this.updateGlass(dt);
     this.updateLightning(dt);
     this.updateBursts(dt);
+    this.updateFireworks(dt);
 
     const p = this.p;
     if (p.snow > 0.2) this.groundSnow = Math.min(1, this.groundSnow + dt * p.snow * 0.05);
@@ -234,6 +245,60 @@ export class Scene {
       s.life -= dt / s.dur;
     }
     this.shooting = this.shooting.filter((s) => s.life > 0);
+  }
+
+  /** Shake the snow globe: a swirl of snow for a few seconds, whatever the weather. */
+  flurry() {
+    this.flurryT = 6;
+    this.flurryFresh = true;
+    for (const f of this.flakes) {
+      f.vx = rand(-260, 260);
+      f.vy = rand(-200, 60);
+    }
+    // give newly spawned flakes a swirl too
+    setTimeout(() => {
+      for (const f of this.flakes) if (!f.vx) {
+        f.vx = rand(-220, 220);
+        f.vy = rand(-160, 60);
+      }
+    }, 50);
+  }
+
+  updateFireworks(dt) {
+    this.rockets ??= [];
+    this.sparks ??= [];
+    const p = this.p;
+    if (p.fireworks && this.nightF > 0.3 && Math.random() < dt * (this.reduced ? 0.4 : 1.4)) {
+      this.rockets.push({
+        x: rand(this.w * 0.1, this.w * 0.9),
+        y: this.h * 0.85,
+        vy: -rand(420, 620) * this.vScale,
+        top: this.h * rand(0.12, 0.4),
+        color: FIREWORK_COLORS[(Math.random() * FIREWORK_COLORS.length) | 0],
+      });
+    }
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i];
+      r.y += r.vy * dt;
+      if (r.y <= r.top) {
+        this.rockets.splice(i, 1);
+        const n = this.reduced ? 30 : 70;
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2;
+          const sp = rand(90, 230) * this.vScale;
+          this.sparks.push({ x: r.x, y: r.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, color: r.color });
+        }
+      }
+    }
+    for (const s of this.sparks) {
+      s.vy += 120 * dt;
+      s.vx *= 1 - dt * 1.2;
+      s.vy *= 1 - dt * 0.6;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.life -= dt / 1.6;
+    }
+    this.sparks = this.sparks.filter((s) => s.life > 0);
   }
 
   addShootingStar(x, y) {
@@ -344,8 +409,11 @@ export class Scene {
 
   updateSnow(dt) {
     const p = this.p;
-    const target = Math.round(p.snow * 480 * this.areaScale);
-    const fresh = this.flakes.length === 0 && this.jumped;
+    if (this.flurryT > 0) this.flurryT -= dt;
+    const flurry = this.flurryT > 0 ? 420 * Math.min(1, this.flurryT / 2) : 0;
+    const target = Math.round((p.snow * 480 + flurry) * this.areaScale);
+    const fresh = (this.flakes.length === 0 && this.jumped) || this.flurryFresh;
+    this.flurryFresh = false;
     while (this.flakes.length < target) {
       this.flakes.push({
         x: rand(-50, this.w + 50),
@@ -364,7 +432,12 @@ export class Scene {
     for (let i = this.flakes.length - 1; i >= 0; i--) {
       const f = this.flakes[i];
       f.y += (22 + f.z * 60) * (0.7 + p.snow * 0.5) * Math.max(0.6, this.vScale) * dt;
-      f.x += (windPx * f.z + Math.sin(this.t * 1.3 + f.ph) * 22 * f.z) * dt;
+      f.x += (windPx * f.z + Math.sin(this.t * 1.3 + f.ph) * 22 * f.z + (f.vx || 0)) * dt;
+      if (f.vx) {
+        f.y += (f.vy || 0) * dt;
+        f.vx *= 1 - dt * 0.9;
+        f.vy *= 1 - dt * 0.9;
+      }
       if (m.active) {
         const dx = f.x - m.x;
         const dy = f.y - m.y;
@@ -389,10 +462,11 @@ export class Scene {
 
   updateLeaves(dt) {
     const p = this.p;
-    const target =
-      p.wind > 22 && p.snow < 0.3 && p.rain < 0.6
-        ? Math.round(clamp((p.wind - 22) * 0.7, 0, 28) * (this.reduced ? 0.4 : 1))
-        : 0;
+    const calm = p.snow < 0.3 && p.rain < 0.6;
+    const windy = p.wind > 22 && calm ? clamp((p.wind - 22) * 0.7, 0, 28) : 0;
+    const seasonal = p.season && calm ? 9 : 0;
+    const target = Math.round(Math.max(windy, seasonal) * (this.reduced ? 0.4 : 1));
+    const palette = p.season === 2 ? BLOSSOM_COLORS : LEAF_COLORS;
     const dir = this.windX >= 0 ? 1 : -1;
     while (this.leaves.length < target) {
       this.leaves.push({
@@ -401,14 +475,15 @@ export class Scene {
         rot: Math.random() * 6.28,
         vr: rand(-6, 6),
         size: rand(5, 11),
-        color: LEAF_COLORS[(Math.random() * LEAF_COLORS.length) | 0],
+        color: palette[(Math.random() * palette.length) | 0],
+        petal: p.season === 2,
         speed: rand(0.7, 1.4),
         ph: Math.random() * 6.28,
       });
     }
     for (let i = this.leaves.length - 1; i >= 0; i--) {
       const l = this.leaves[i];
-      l.x += dir * p.wind * 9 * l.speed * dt;
+      l.x += dir * Math.max(p.wind * 9, 35) * l.speed * dt;
       l.y += (30 + Math.sin(this.t * 2 + l.ph) * 90) * dt;
       l.rot += l.vr * dt;
       const out = l.x > this.w + 220 || l.x < -220 || l.y > this.h + 20;
@@ -556,10 +631,14 @@ export class Scene {
     ctx.fillRect(0, 0, w, h);
 
     this.drawStars(nightF);
+    this.drawAurora(nightF);
     this.drawMoon(dayF);
     const sun = this.drawSun();
     this.drawClouds(dayF);
+    this.drawRainbow();
+    this.drawFireworks();
     this.drawHills(dayF, gloom);
+    this.drawHaze(dayF);
     this.drawHeat();
     this.drawRain(dayF);
     this.drawSnow();
@@ -606,6 +685,104 @@ export class Scene {
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
+  }
+
+  drawAurora(nightF) {
+    const { ctx, w, h, p } = this;
+    const vis = p.aurora * nightF * (1 - p.cloud * 0.85) * (1 - p.fog);
+    if (vis < 0.01) return;
+    if (!this.auroraSprite) {
+      const c = document.createElement('canvas');
+      c.width = 4;
+      c.height = 256;
+      const g = c.getContext('2d');
+      const gr = g.createLinearGradient(0, 0, 0, 256);
+      gr.addColorStop(0, 'rgba(160,90,255,0)');
+      gr.addColorStop(0.45, 'rgba(150,100,255,0.35)');
+      gr.addColorStop(0.8, 'rgba(80,255,170,0.9)');
+      gr.addColorStop(0.92, 'rgba(170,255,210,1)');
+      gr.addColorStop(1, 'rgba(80,255,170,0)');
+      g.fillStyle = gr;
+      g.fillRect(0, 0, 4, 256);
+      this.auroraSprite = c;
+    }
+    const t = this.t * (this.reduced ? 0.3 : 1);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i++) {
+      const base = h * (0.26 + i * 0.07);
+      for (let x = -10; x < w + 10; x += 5) {
+        const y = base + Math.sin(x * 0.004 + t * 0.25 + i * 2) * h * 0.06 + Math.sin(x * 0.013 - t * 0.4 + i) * h * 0.015;
+        const tall = h * (0.16 + 0.08 * Math.sin(x * 0.006 + t * 0.6 + i * 1.7));
+        const a = vis * (0.18 + 0.14 * Math.sin(x * 0.021 + t * 1.1 + i * 3)) * (i === 1 ? 1 : 0.7);
+        if (a <= 0) continue;
+        ctx.globalAlpha = a;
+        ctx.drawImage(this.auroraSprite, x, y - tall, 5, tall + 8);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  drawRainbow() {
+    const { ctx, w, h, p } = this;
+    if (p.rainbow < 0.01 || p.sunAlt < -1) return;
+    const horizon = h * 0.82;
+    // The rainbow sits opposite the sun, centred below the horizon.
+    const cx = w * (0.5 - 0.42 * Math.sin(p.sunAz));
+    const cy = horizon + clamp(p.sunAlt / 70, 0, 1) * horizon * 0.82;
+    const R = Math.min(w * 0.55, h * 0.75);
+    const bands = ['255,70,70', '255,150,50', '255,230,80', '90,220,100', '70,150,255', '130,90,235'];
+    const bw = R * 0.022;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.lineWidth = bw * 1.25;
+    const fade = clamp(1 - p.cloud * 0.6) * p.rainbow;
+    bands.forEach((col, i) => {
+      ctx.strokeStyle = `rgba(${col},${0.32 * fade})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R - i * bw, Math.PI, Math.PI * 2);
+      ctx.stroke();
+    });
+    // faint secondary bow
+    ctx.lineWidth = bw * 0.8;
+    bands.forEach((col, i) => {
+      ctx.strokeStyle = `rgba(${col},${0.09 * fade})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * 1.22 + i * bw * 0.8, Math.PI, Math.PI * 2);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  drawFireworks() {
+    const { ctx } = this;
+    if (!this.sparks?.length && !this.rockets?.length) return;
+    ctx.globalCompositeOperation = 'lighter';
+    for (const r of this.rockets) {
+      ctx.fillStyle = '#ffe9b0';
+      ctx.fillRect(r.x - 1, r.y, 2, 10);
+    }
+    for (const s of this.sparks) {
+      ctx.globalAlpha = Math.min(1, s.life * 1.4);
+      ctx.fillStyle = s.color;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  drawHaze(dayF) {
+    const { ctx, w, h, p } = this;
+    if (p.haze < 0.01) return;
+    const col = mixRgb([60, 55, 50], [190, 165, 130], dayF);
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, rgba(col, p.haze * 0.12));
+    g.addColorStop(0.75, rgba(col, p.haze * 0.42));
+    g.addColorStop(1, rgba(col, p.haze * 0.3));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
   }
 
   drawMoon(dayF) {
@@ -848,8 +1025,12 @@ export class Scene {
       ctx.scale(1, Math.abs(Math.sin(l.rot * 0.7)) * 0.7 + 0.3); // fake 3D flip
       ctx.fillStyle = l.color;
       ctx.beginPath();
-      ctx.ellipse(0, 0, l.size, l.size * 0.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, l.size * (l.petal ? 0.7 : 1), l.size * (l.petal ? 0.55 : 0.5), 0, 0, Math.PI * 2);
       ctx.fill();
+      if (l.petal) {
+        ctx.restore();
+        continue;
+      }
       ctx.strokeStyle = 'rgba(80,40,10,0.5)';
       ctx.lineWidth = 1;
       ctx.beginPath();
