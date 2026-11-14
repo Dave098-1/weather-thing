@@ -46,3 +46,9 @@ npm run preview  # serve the production build
 | `src/astro.js` | Sun/moon position and moon phase maths |
 | `src/audio.js` | Web Audio soundscape |
 | `src/mood.js` | Cheeky one-liners per condition |
+
+## Hosting on GitHub Pages
+
+`.github/workflows/deploy-pages.yml` builds the site and publishes it whenever `main` changes.
+One-time setup: in the repository go to **Settings → Pages → Build and deployment → Source** and
+choose **GitHub Actions**. The site is then served at `https://<user>.github.io/weather-thing/`.
